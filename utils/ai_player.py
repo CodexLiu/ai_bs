@@ -160,22 +160,17 @@ class AIPlayer:
             
         elif action == "call_bs":
             if game_context["is_my_turn"]:
-                validation["error"] = "Cannot call BS on your own turn"
+                validation["error"] = "Cannot call BS when it's your turn - you must play cards"
                 return validation
             
             current_player = game_context["current_player"]
             center_pile_size = game_context["center_pile_size"]
+            next_player = self.context_manager.game_state_manager.get_next_player()
             
-            is_valid, error = validate_call_bs_action(current_player, self.player_id, center_pile_size)
+            is_valid, error = validate_call_bs_action(current_player, self.player_id, center_pile_size, next_player)
             validation["is_valid"] = is_valid
             validation["error"] = error
             
-        elif action == "pass_turn":
-            if game_context["is_my_turn"]:
-                validation["error"] = "Cannot pass when it's your turn to play"
-                return validation
-            
-            validation["is_valid"] = True
             
         else:
             validation["error"] = f"Unknown action: {action}"
@@ -201,14 +196,22 @@ class AIPlayer:
         action = action_result["action"]
         parameters = action_result["parameters"]
         
-        if action == "play_cards":
+        # Check if it's the player's turn
+        game_context = self.context_manager.get_game_state_summary(self.player_id)
+        
+        if game_context["is_my_turn"]:
+            # When it's your turn, you can ONLY play cards
+            if action != "play_cards":
+                return False, f"When it's your turn, you must play cards. Cannot {action}"
             return self._execute_play_cards(parameters)
-        elif action == "call_bs":
-            return self._execute_call_bs(parameters)
-        elif action == "pass_turn":
-            return True, f"{self.player_id} passed their turn"
         else:
-            return False, f"Cannot execute action: {action}"
+            # When it's not your turn, you can only call BS
+            if action == "call_bs":
+                return self._execute_call_bs(parameters)
+            elif action == "play_cards":
+                return False, "Cannot play cards when it's not your turn"
+            else:
+                return False, f"Cannot execute action: {action}"
     
     def _execute_play_cards(self, parameters: Dict[str, Any]) -> Tuple[bool, str]:
         """Execute play_cards action"""

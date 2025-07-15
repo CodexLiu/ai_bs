@@ -58,19 +58,23 @@ CURRENT GAME STATE:
             base_prompt += f"""
 
 IT'S YOUR TURN TO PLAY:
-- You must play cards and claim they are {context['expected_rank_name']}s
+- You MUST play cards and claim they are {context['expected_rank_name']}s
 - You can play 1-4 cards
 - Use the play_cards function with card indices from your hand
 - You can tell the truth or bluff - both are valid strategies
-- Consider what cards others might have and your winning chances"""
+- Consider what cards others might have and your winning chances
+- IMPORTANT: You cannot pass, call BS, or do anything else - you MUST play cards"""
         else:
+            next_player = self.game_state_manager.get_next_player()
             base_prompt += f"""
 
 IT'S NOT YOUR TURN:
 - {context['current_player']} just played cards claiming they were {context['expected_rank_name']}s
-- You can call BS if you think they were lying
-- You can pass if you believe them or don't want to risk it
-- Consider: Do you have cards that make their claim unlikely?"""
+- Only the next player in turn order ({next_player}) can call BS
+- If you are {next_player}, you can call BS if you think they were lying
+- If you are not {next_player}, you must wait for your turn
+- Consider: Do you have cards that make their claim unlikely?
+- IMPORTANT: You don't need to "pass" - just don't call BS if you believe them or if it's not your turn to call BS"""
         
         # Add personality and play style
         if personality:

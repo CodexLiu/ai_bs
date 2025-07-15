@@ -29,7 +29,7 @@ class GameLogger:
         if self.mode == LogLevel.PLAY:
             print(f"🎮 Game started with players: {', '.join(player_ids)}")
         elif self.mode == LogLevel.DEBUG:
-            print(f"DEBUG: Game started - {json.dumps(log_entry, indent=2)}")
+            print(f"🎮 DEBUG: Game started with players: {', '.join(player_ids)}")
     
     def log_turn_start(self, turn_number: int, player_id: str, game_state: Dict[str, Any]):
         """Log the start of a player's turn"""
@@ -47,7 +47,15 @@ class GameLogger:
             print(f"   Expected rank: {game_state.get('expected_rank', 'Unknown')}")
             print(f"   Cards in center: {game_state.get('center_pile_size', 0)}")
         elif self.mode == LogLevel.DEBUG:
-            print(f"DEBUG: Turn start - {json.dumps(log_entry, indent=2)}")
+            print(f"\n🎯 DEBUG Turn {turn_number}: {player_id}'s turn")
+            print(f"   Expected rank: {game_state.get('expected_rank', 'Unknown')}")
+            print(f"   Cards in center: {game_state.get('center_pile_size', 0)}")
+            
+            # Show other players' hand counts
+            other_players = game_state.get('other_players', {})
+            if other_players:
+                hand_counts = [f"{pid}: {count}" for pid, count in other_players.items()]
+                print(f"   Other players' hand counts: {', '.join(hand_counts)}")
     
     def log_ai_action(self, player_id: str, action_result: Dict[str, Any]):
         """Log an AI player's action and reasoning"""
@@ -86,23 +94,28 @@ class GameLogger:
             print(f"   🚨 {player_id} calls BS!")
             if reasoning:
                 print(f"      Reasoning: {reasoning}")
-        elif action == "pass_turn":
-            print(f"   ⏭️ {player_id} passes")
-            if reasoning:
-                print(f"      Reasoning: {reasoning}")
         elif action == "error":
             print(f"   ❌ {player_id} error: {action_result.get('error', 'Unknown error')}")
     
     def _print_debug_action(self, player_id: str, action_result: Dict[str, Any]):
-        """Print action in debug mode"""
-        print(f"DEBUG: AI Action for {player_id}")
-        print(f"  Action: {action_result.get('action')}")
-        print(f"  Parameters: {json.dumps(action_result.get('parameters', {}), indent=4)}")
-        print(f"  Reasoning: {action_result.get('reasoning', '')}")
-        print(f"  Validation: {json.dumps(action_result.get('validation', {}), indent=4)}")
+        """Print action in debug mode - simplified version"""
+        action = action_result.get("action")
+        parameters = action_result.get("parameters", {})
+        reasoning = action_result.get("reasoning", "")
         
-        if "debug_info" in action_result:
-            print(f"  Debug Info: {json.dumps(action_result['debug_info'], indent=4)}")
+        if action == "play_cards":
+            count = parameters.get("claimed_count", 0)
+            card_indices = parameters.get("card_indices", [])
+            print(f"   🃏 DEBUG: {player_id} plays {count} cards (indices: {card_indices})")
+            if reasoning:
+                print(f"      Reasoning: {reasoning}")
+        elif action == "call_bs":
+            print(f"   🚨 DEBUG: {player_id} calls BS!")
+            if reasoning:
+                print(f"      Reasoning: {reasoning}")
+
+        elif action == "error":
+            print(f"   ❌ DEBUG: {player_id} error: {action_result.get('error', 'Unknown error')}")
     
     def log_action_result(self, player_id: str, success: bool, message: str):
         """Log the result of an action execution"""
@@ -121,7 +134,10 @@ class GameLogger:
             else:
                 print(f"   ❌ {message}")
         elif self.mode == LogLevel.DEBUG:
-            print(f"DEBUG: Action result - {json.dumps(log_entry, indent=2)}")
+            if success:
+                print(f"   ✅ DEBUG: {message}")
+            else:
+                print(f"   ❌ DEBUG: {message}")
     
     def log_bs_call_result(self, caller: str, target: str, was_bs: bool, cards_revealed: List[str]):
         """Log the result of a BS call"""
@@ -145,7 +161,14 @@ class GameLogger:
                 print(f"   📄 Cards revealed: {', '.join(cards_revealed)}")
                 print(f"   📚 {caller} takes all center pile cards")
         elif self.mode == LogLevel.DEBUG:
-            print(f"DEBUG: BS call result - {json.dumps(log_entry, indent=2)}")
+            if was_bs:
+                print(f"   🎯 DEBUG: Correct! {target} was bluffing")
+                print(f"   📄 Cards revealed: {', '.join(cards_revealed)}")
+                print(f"   📚 {target} takes all center pile cards")
+            else:
+                print(f"   💥 DEBUG: Wrong! {target} was telling the truth")
+                print(f"   📄 Cards revealed: {', '.join(cards_revealed)}")
+                print(f"   📚 {caller} takes all center pile cards")
     
     def log_game_state_change(self, event: str, details: Dict[str, Any]):
         """Log a general game state change"""
@@ -157,7 +180,7 @@ class GameLogger:
         self.game_log.append(log_entry)
         
         if self.mode == LogLevel.DEBUG:
-            print(f"DEBUG: Game state change - {json.dumps(log_entry, indent=2)}")
+            print(f"DEBUG: Game state change - {event}")
     
     def log_game_end(self, winner: str, final_state: Dict[str, Any]):
         """Log the end of the game"""
@@ -176,7 +199,11 @@ class GameLogger:
             print(f"\n🏆 Game Over! {winner} wins!")
             print(f"⏱️ Game duration: {game_duration.total_seconds():.1f} seconds")
         elif self.mode == LogLevel.DEBUG:
-            print(f"DEBUG: Game end - {json.dumps(log_entry, indent=2)}")
+            print(f"\n🏆 DEBUG: Game Over! {winner} wins!")
+            print(f"⏱️ Game duration: {game_duration.total_seconds():.1f} seconds")
+            final_hand_counts = final_state.get('final_hand_counts', {})
+            if final_hand_counts:
+                print(f"📊 Final hand counts: {final_hand_counts}")
     
     def log_error(self, error_type: str, message: str, details: Dict[str, Any] = None):
         """Log an error"""
@@ -191,7 +218,18 @@ class GameLogger:
         
         print(f"❌ ERROR ({error_type}): {message}")
         if self.mode == LogLevel.DEBUG and details:
-            print(f"    Details: {json.dumps(details, indent=4)}")
+            print(f"    Details: {details}")
+    
+    def log_player_hands(self, player_hands: Dict[str, List[str]]):
+        """Log all player hands in debug mode"""
+        if self.mode == LogLevel.DEBUG:
+            print("\n📋 PLAYER HANDS:")
+            for player_id, hand in player_hands.items():
+                if hand:
+                    hand_str = ", ".join(str(card) for card in hand)
+                    print(f"   {player_id}: [{hand_str}] ({len(hand)} cards)")
+                else:
+                    print(f"   {player_id}: [No cards] (0 cards)")
     
     def get_game_summary(self) -> Dict[str, Any]:
         """Get a summary of the game"""

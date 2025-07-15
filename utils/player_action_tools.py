@@ -35,28 +35,13 @@ def get_player_action_tools() -> List[Dict[str, Any]]:
         {
             "type": "function",
             "name": "call_bs",
-            "description": "Call BS on the previous player's claim if you think they were lying about their cards.",
+            "description": "Call BS on the previous player's claim if you think they were lying about their cards. You can only call BS if you are the next player in the turn order. You cannot call BS on yourself or when it's your turn to play.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "reasoning": {
                         "type": "string",
                         "description": "Brief explanation of why you think the previous player was bluffing (e.g., 'They claimed 4 Aces but I have 3 Aces' or 'Suspicious behavior')"
-                    }
-                },
-                "required": ["reasoning"]
-            }
-        },
-        {
-            "type": "function",
-            "name": "pass_turn",
-            "description": "Pass your turn without calling BS. This is only valid when it's not your turn to play cards.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "reasoning": {
-                        "type": "string",
-                        "description": "Brief explanation of why you're passing (e.g., 'I believe their claim' or 'Too risky to call BS')"
                     }
                 },
                 "required": ["reasoning"]
@@ -70,8 +55,7 @@ def create_tool_mapping() -> Dict[str, str]:
     """
     return {
         "play_cards": "Play cards from hand with a claim about their rank",
-        "call_bs": "Challenge the previous player's claim",
-        "pass_turn": "Pass turn without calling BS"
+        "call_bs": "Challenge the previous player's claim"
     }
 
 def validate_play_cards_action(card_indices: List[int], claimed_count: int, hand_size: int) -> tuple[bool, str]:
@@ -103,7 +87,7 @@ def validate_play_cards_action(card_indices: List[int], claimed_count: int, hand
     
     return True, ""
 
-def validate_call_bs_action(current_player: str, caller_id: str, center_pile_count: int) -> tuple[bool, str]:
+def validate_call_bs_action(current_player: str, caller_id: str, center_pile_count: int, next_player: str) -> tuple[bool, str]:
     """
     Validates a call_bs action before execution.
     
@@ -111,6 +95,7 @@ def validate_call_bs_action(current_player: str, caller_id: str, center_pile_cou
         current_player: ID of the current player
         caller_id: ID of the player calling BS
         center_pile_count: Number of cards in center pile
+        next_player: ID of the next player in turn order
         
     Returns:
         Tuple of (is_valid, error_message)
@@ -120,5 +105,8 @@ def validate_call_bs_action(current_player: str, caller_id: str, center_pile_cou
     
     if current_player == caller_id:
         return False, "Cannot call BS on yourself"
+    
+    if caller_id != next_player:
+        return False, "Only the next player in turn order can call BS"
     
     return True, "" 

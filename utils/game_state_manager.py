@@ -80,6 +80,11 @@ class GameStateManager:
         """Get the current player's ID"""
         return self.game_state.player_order[self.game_state.current_player_index]
     
+    def get_next_player(self) -> str:
+        """Get the next player's ID in the turn order"""
+        next_index = (self.game_state.current_player_index + 1) % len(self.game_state.player_order)
+        return self.game_state.player_order[next_index]
+    
     def get_player_hand_count(self, player_id: str) -> int:
         """Get the number of cards in a player's hand"""
         return len(self.game_state.player_hands.get(player_id, []))
@@ -142,9 +147,8 @@ class GameStateManager:
             self.game_state.game_phase = GamePhase.GAME_OVER
             return True
         
-        # Move to next player and rank
-        self._advance_turn()
-        self.game_state.last_action = f"{player_id} played {claimed_count} {self.get_expected_rank_name()}s"
+        # Don't advance turn here - let orchestrator handle it after BS calls
+        self.game_state.last_action = f"{player_id} played {claimed_count} cards"
         
         return True
     
@@ -169,15 +173,24 @@ class GameStateManager:
             self._player_takes_center_pile(last_play.player_id)
             result_msg = f"{caller_id} correctly called BS on {last_play.player_id}"
             self.game_state.last_action = result_msg
-            # Next player continues from caller
-            self.game_state.current_player_index = self.player_ids.index(caller_id)
+            # Person who called BS gets to play next with the next rank
+            old_index = self.game_state.current_player_index
+            old_player = self.game_state.player_order[old_index]
+            self.game_state.current_player_index = self.game_state.player_order.index(caller_id)
+            self.game_state.turn_number += 1
+            self._advance_rank()
+            print(f"   🔄 DEBUG: BS correct - turn set from {old_player} (index {old_index}) to {caller_id} (index {self.game_state.current_player_index})")
         else:
             # BS was called incorrectly - caller takes all cards
             self._player_takes_center_pile(caller_id)
             result_msg = f"{caller_id} incorrectly called BS on {last_play.player_id}"
             self.game_state.last_action = result_msg
-            # Next player continues from the player who was called
-            self.game_state.current_player_index = self.player_ids.index(last_play.player_id)
+            # Turn advances to next player in sequence after incorrect BS call
+            old_index = self.game_state.current_player_index
+            old_player = self.game_state.player_order[old_index]
+            self._advance_turn()
+            new_player = self.game_state.player_order[self.game_state.current_player_index]
+            print(f"   🔄 DEBUG: BS incorrect - turn advances from {old_player} (index {old_index}) to {new_player} (index {self.game_state.current_player_index})")
         
         return True, result_msg
     
@@ -192,14 +205,29 @@ class GameStateManager:
     
     def _advance_turn(self):
         """Move to the next player and next expected rank"""
-        self.game_state.current_player_index = (self.game_state.current_player_index + 1) % len(self.player_ids)
-        self.game_state.turn_number += 1
+        old_index = self.game_state.current_player_index
+        old_player = self.game_state.player_order[old_index]
         
-        # Advance expected rank (Ace -> 2 -> 3 -> ... -> King -> Ace)
+        self.game_state.current_player_index = (self.game_state.current_player_index + 1) % len(self.game_state.player_order)
+        self.game_state.turn_number += 1
+        self._advance_rank()
+        
+        new_index = self.game_state.current_player_index
+        new_player = self.game_state.player_order[new_index]
+        
+        # Debug logging
+        print(f"   🔄 DEBUG: Turn advanced from {old_player} (index {old_index}) to {new_player} (index {new_index})")
+    
+    def _advance_rank(self):
+        """Advance to the next expected rank"""
         next_rank_value = self.game_state.current_expected_rank.value + 1
         if next_rank_value > 13:
             next_rank_value = 1
         self.game_state.current_expected_rank = Rank(next_rank_value)
+    
+    def advance_turn(self):
+        """Public method to advance the turn"""
+        self._advance_turn()
     
     def get_game_context_for_player(self, player_id: str) -> Dict:
         """Get all visible game context for a specific player"""
@@ -227,4 +255,8 @@ class GameStateManager:
     
     def get_winner(self) -> Optional[str]:
         """Get the winner of the game"""
-        return self.game_state.winner 
+        return self.game_state.winner
+    
+    def get_turn_number(self) -> int:
+        """Get the current turn number"""
+        return self.game_state.turn_number 
