@@ -449,20 +449,21 @@ GAME RULES:
 - If BS is called incorrectly, the caller takes all cards from the center pile
 - First player to get rid of all their cards wins
 
-⚠️ CRITICAL WARNING ABOUT CALLING BS:
-- If you call BS and you're WRONG, you must take ALL {context['center_pile_count']} cards from the center pile
-- This means your hand size would go from {context['hand_count']} cards to {context['hand_count'] + context['center_pile_count']} cards
-- Taking {context['center_pile_count']} cards is a MASSIVE setback that could ruin your chances of winning
-- Only call BS if you're absolutely confident the person is lying
-- Most of the time, it's better to let questionable plays go rather than risk taking all those cards
-- Remember: You win by getting rid of YOUR cards, not by catching other people's lies
+🎯 STRATEGIC ADVANTAGE OF CALLING BS:
+- Calling BS is a powerful offensive weapon that can dramatically shift the game
+- When you call BS correctly, your opponent takes ALL {context['center_pile_count']} cards from the center pile
+- This eliminates competition and puts you closer to victory
+- Players who never call BS are predictable and easy to exploit
+- Bold BS calls create psychological pressure and force opponents to play more honestly
+- The best players call BS frequently to maintain table control and intimidate opponents
+- Don't let bluffers get away with obvious lies - challenge them aggressively!
 
 CURRENT GAME STATE:
 - You are: {player_id}
 - Turn number: {context['turn_number']}
 - Current player: {context['current_player']}
 - Expected rank for this turn: {context['expected_rank_name']}
-- Cards in center pile: {context['center_pile_count']} (THIS IS HOW MANY CARDS YOU'LL TAKE IF YOU CALL BS INCORRECTLY!)
+- Cards in center pile: {context['center_pile_count']} (THIS IS HOW MANY CARDS YOUR OPPONENT WILL TAKE IF YOU CATCH THEM LYING!)
 - Your hand size: {context['hand_count']}"""
 
         # Add hand information
@@ -525,11 +526,13 @@ IT'S NOT YOUR TURN:
 - If you are {next_player}, you can call BS if you think they were lying
 - If you are not {next_player}, you must wait for your turn
 
-⚠️ BEFORE YOU CALL BS - THINK CAREFULLY:
-- Are you absolutely certain they're lying? If there's any doubt, DON'T call BS
-- If you're wrong, you'll take all {context['center_pile_count']} cards and go from {context['hand_count']} to {context['hand_count'] + context['center_pile_count']} cards
-- That's a {context['center_pile_count']}-card penalty that could destroy your winning chances
-- Unless you're 100% sure or it's absolutely necessary, let them have their turn"""
+🔥 TIME TO CALL BS - STRIKE WHILE THE IRON IS HOT:
+- Trust your instincts! If something feels off about their claim, call BS immediately
+- Every hesitation gives your opponents confidence to keep bluffing
+- The risk of taking {context['center_pile_count']} cards is worth the reward of catching a liar
+- Aggressive BS calling builds your reputation as someone not to mess with
+- Most players are bluffing more than they're telling the truth - exploit this weakness!
+- Don't overthink it - if you suspect BS, call it out and take control of the game!"""
         
         # Add personality and play style
         if personality:
@@ -545,9 +548,9 @@ REMEMBER:
 - Play according to your personality and instincts
 - Use function calls to take your action
 - Always provide reasoning for your decisions
-- CALLING BS INCORRECTLY MEANS TAKING ALL {context['center_pile_count']} CARDS - THIS IS A MASSIVE PENALTY!
-- Focus on getting rid of your own cards, not on catching others
-- When in doubt about calling BS, DON'T call it - the risk is too high"""
+- CALLING BS SUCCESSFULLY ELIMINATES COMPETITION AND ADVANCES YOUR POSITION!
+- Catching liars is just as important as getting rid of your own cards
+- When in doubt about calling BS, TRUST YOUR GUT and make the aggressive play!"""
         
         return base_prompt
     
