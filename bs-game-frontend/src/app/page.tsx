@@ -27,6 +27,9 @@ export default function GamePage() {
   const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
+  // Auto-pan to current player
+  const [previousCurrentPlayer, setPreviousCurrentPlayer] = useState<string | null>(null);
+
   // Modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
@@ -227,6 +230,80 @@ export default function GamePage() {
     setIsDragging(false);
     setDragStart(null);
   }, []);
+
+  // Function to calculate player position (matching GameBoard logic)
+  const getPlayerPosition = useCallback((index: number, total: number) => {
+    const centerX = typeof window !== 'undefined' ? window.innerWidth / 2 : 800;
+    const centerY = typeof window !== 'undefined' ? window.innerHeight / 2 : 400;
+    
+    // Use different radii for horizontal and vertical axes to form an ellipse
+    const horizontalRadius = (typeof window !== 'undefined' ? window.innerWidth / 2 : 600) * 0.8;
+    const verticalRadius = (typeof window !== 'undefined' ? window.innerHeight / 2 : 400) * 0.7;
+    
+    const angle = (index * 2 * Math.PI) / total - Math.PI / 2;
+    
+    return {
+      x: centerX + Math.cos(angle) * horizontalRadius,
+      y: centerY + Math.sin(angle) * verticalRadius
+    };
+  }, []);
+
+  // Function to calculate pan offset to center a specific player
+  const getPanToPlayer = useCallback((playerId: string) => {
+    if (!gameState) return { x: 0, y: 0 };
+    
+    const playerIndex = gameState.players.findIndex(p => p.id === playerId);
+    if (playerIndex === -1) return { x: 0, y: 0 };
+    
+    const playerPosition = getPlayerPosition(playerIndex, gameState.players.length);
+    const screenCenter = {
+      x: typeof window !== 'undefined' ? window.innerWidth / 2 : 800,
+      y: typeof window !== 'undefined' ? window.innerHeight / 2 : 400
+    };
+    
+    // Calculate the offset needed to center the player on screen
+    return {
+      x: screenCenter.x - playerPosition.x,
+      y: screenCenter.y - playerPosition.y
+    };
+  }, [gameState, getPlayerPosition]);
+
+  // Auto-pan to current player when their turn starts
+  useEffect(() => {
+    if (!gameState || isDragging) return;
+    
+    const currentPlayer = gameState.players.find(p => p.is_current_player);
+    if (currentPlayer && currentPlayer.id !== previousCurrentPlayer) {
+      const newPan = getPanToPlayer(currentPlayer.id);
+      
+      // Smooth transition animation
+      const animationDuration = 800;
+      const startTime = Date.now();
+      const startPan = { ...pan };
+      
+      const animateToPlayer = () => {
+        const elapsed = Date.now() - startTime;
+        const progress = Math.min(elapsed / animationDuration, 1);
+        
+        // Easing function for smooth animation
+        const easeProgress = 1 - Math.pow(1 - progress, 3);
+        
+        const currentPan = {
+          x: startPan.x + (newPan.x - startPan.x) * easeProgress,
+          y: startPan.y + (newPan.y - startPan.y) * easeProgress
+        };
+        
+        setPan(currentPan);
+        
+        if (progress < 1) {
+          requestAnimationFrame(animateToPlayer);
+        }
+      };
+      
+      requestAnimationFrame(animateToPlayer);
+      setPreviousCurrentPlayer(currentPlayer.id);
+    }
+  }, [gameState, isDragging, previousCurrentPlayer, getPanToPlayer, pan]);
 
   // Show start game screen if no game is active
   if (!isGameStarted || !gameState || gameState.game_phase === 'waiting' || gameState.last_action === 'No game active') {

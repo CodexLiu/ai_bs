@@ -40,7 +40,7 @@ class GameOrchestrator:
         
         # Game flow control
         self.max_turns = 1000  # Prevent infinite games
-        self.turn_delay = 5.0  # 5 second delay between turns for animations
+        self.turn_delay = 1.0  # 1 second delay between turns for animations
         
         # Web interface support
         self.current_action = None

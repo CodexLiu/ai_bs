@@ -41,15 +41,16 @@ const AgentSummaryModal: React.FC<AgentSummaryModalProps> = ({
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50"
+          className="fixed inset-0 flex items-center justify-center z-50"
           onClick={onClose}
         >
+          <div className="absolute inset-0 bg-black bg-opacity-40"></div>
           <motion.div
             initial={{ scale: 0.8, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0.8, opacity: 0 }}
             transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-            className="bg-gray-900 border-2 border-green-400 rounded-lg w-11/12 max-w-4xl max-h-[90vh] overflow-hidden"
+            className="relative bg-gray-900 border-2 border-green-400 rounded-lg w-11/12 max-w-4xl max-h-[90vh] overflow-hidden z-10"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Terminal Header */}

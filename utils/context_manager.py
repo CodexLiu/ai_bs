@@ -242,21 +242,73 @@ IT'S NOT YOUR TURN:
         if play_style:
             base_prompt += f"\n\nYOUR PLAY STYLE: {play_style}"
         
-        # Add strategy considerations
-        base_prompt += """
+        # Add comprehensive strategy considerations
+        base_prompt += f"""
+
+WINNING CONDITIONS AND STRATEGIC ANALYSIS:
+- OBJECTIVE: Be the first player to get rid of all your cards
+- Current threat assessment based on card counts:
+  * You have {context['hand_count']} cards - {'Very close to winning!' if context['hand_count'] <= 3 else 'Close to winning' if context['hand_count'] <= 6 else 'Mid-game' if context['hand_count'] <= 10 else 'Early game'}
+  * Opponents: {', '.join([f"{pid} has {count} cards" for pid, count in context['other_players_hand_counts'].items()])}
+  * Center pile: {context['center_pile_count']} cards (high risk/reward for BS calls)
+
+DECISION IMPACT ANALYSIS:
+- If you make a CORRECT play (truth or successful bluff):
+  * You reduce your hand size and move closer to winning
+  * Opponents must decide whether to call BS (risk vs reward)
+  * You maintain control of the game flow
+
+- If you make an INCORRECT play (caught bluffing):
+  * You take ALL {context['center_pile_count']} cards from center pile
+  * Your hand size increases significantly, moving you away from winning
+  * Other players gain strategic advantage
+
+- If you call BS CORRECTLY:
+  * The liar takes all {context['center_pile_count']} cards from center pile
+  * You don't take any cards and maintain your position
+  * You prevent a potentially winning move by the liar
+
+- If you call BS INCORRECTLY:
+  * YOU take all {context['center_pile_count']} cards from center pile
+  * Your hand size increases by {context['center_pile_count']} cards
+  * The player you called BS on gets closer to winning
+  * This is a MAJOR setback - only call BS when confident!
+
+CARD COUNT STRATEGIC IMPLICATIONS:
+- Players with very few cards (1-3): IMMEDIATE WINNING THREAT
+  * Be extremely suspicious of their plays
+  * Consider aggressive BS calls to prevent them from winning
+  * They may be more likely to bluff to get rid of remaining cards
+  
+- Players with moderate cards (4-8): ACTIVE COMPETITORS
+  * Monitor their plays carefully
+  * They balance risk vs reward in their decisions
+  * Good targets for strategic BS calls if caught bluffing
+  
+- Players with many cards (9+): LESS IMMEDIATE THREAT
+  * May play more conservatively to avoid taking more cards
+  * Less likely to make risky bluffs
+  * Focus on your own game vs these players
+
+CENTER PILE RISK ASSESSMENT:
+- Current center pile: {context['center_pile_count']} cards
+- Risk level: {'EXTREME' if context['center_pile_count'] >= 15 else 'HIGH' if context['center_pile_count'] >= 10 else 'MODERATE' if context['center_pile_count'] >= 5 else 'LOW'}
+- Taking these cards would {'devastate your position' if context['center_pile_count'] >= 15 else 'seriously hurt your chances' if context['center_pile_count'] >= 10 else 'set you back significantly' if context['center_pile_count'] >= 5 else 'slightly impact your position'}
 
 STRATEGY CONSIDERATIONS:
-- Early game: Focus on getting rid of cards efficiently
-- Mid game: Pay attention to what cards have been played
+- Early game: Focus on getting rid of cards efficiently, build read on opponents
+- Mid game: Pay attention to what cards have been played, start tactical thinking
 - Late game: Be more aggressive with BS calls when players are close to winning
-- Bluffing: Mix truth and lies to keep opponents guessing
-- Calling BS: Consider probability based on cards you've seen and hold
+- Bluffing: Mix truth and lies to keep opponents guessing, but consider the risk
+- Calling BS: Consider probability based on cards you've seen and hold, and the center pile size
 
 IMPORTANT REMINDERS:
 - You can only see your own cards, not others' cards
 - Cards are played face-down, so you don't know what was actually played until BS is called
 - Use function calls to take your action
-- Always provide reasoning for your decisions"""
+- Always provide reasoning for your decisions
+- Consider both immediate and long-term consequences of every action
+- The center pile size makes BS calls increasingly risky as the game progresses"""
         
         return base_prompt
     

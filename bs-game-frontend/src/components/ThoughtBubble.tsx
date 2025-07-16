@@ -6,13 +6,15 @@ interface ThoughtBubbleProps {
   reasoning: string;
   position: { x: number; y: number };
   onComplete?: () => void;
+  shouldExit?: boolean;
 }
 
 const ThoughtBubble: React.FC<ThoughtBubbleProps> = ({ 
   playerId, 
   reasoning, 
   position, 
-  onComplete 
+  onComplete,
+  shouldExit = false
 }) => {
   const [displayText, setDisplayText] = useState('');
   const [isTyping, setIsTyping] = useState(true);
@@ -46,7 +48,7 @@ const ThoughtBubble: React.FC<ThoughtBubbleProps> = ({
     }, 20); // Typing speed - much faster
 
     return () => clearInterval(typeInterval);
-  }, [reasoning]);
+  }, [reasoning, onComplete]);
 
   // Cursor blinking effect
   useEffect(() => {
@@ -60,31 +62,36 @@ const ThoughtBubble: React.FC<ThoughtBubbleProps> = ({
   if (!reasoning) return null;
 
   return (
-    <AnimatePresence>
-      <motion.div
-        initial={{ opacity: 0, scale: 0.8, y: 20 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ 
-          opacity: 0, 
-          scale: 0.1, 
-          x: -200, // Move towards the player card (to the left)
-          y: 10,   // Slight downward movement
-          rotate: -10 // Slight rotation for dynamic effect
-        }}
-        transition={{ 
-          duration: 0.5,
-          ease: "easeInOut",
-          exit: {
-            duration: 0.4,
-            ease: "easeIn"
-          }
-        }}
-        className="z-30 pointer-events-none"
-        style={{
-          width: '300px',
-          minWidth: '300px'
-        }}
-      >
+    <motion.div
+      initial={{ opacity: 0, scale: 0.8, y: 20 }}
+      animate={shouldExit ? { 
+        opacity: 0, 
+        scale: 0.1, 
+        x: -200, // Move towards the player card (to the left)
+        y: 10,   // Slight downward movement
+        rotate: -10 // Slight rotation for dynamic effect
+      } : { 
+        opacity: 1, 
+        scale: 1, 
+        y: 0 
+      }}
+      exit={{ 
+        opacity: 0, 
+        scale: 0.1, 
+        x: -200, // Move towards the player card (to the left)
+        y: 10,   // Slight downward movement
+        rotate: -10 // Slight rotation for dynamic effect
+      }}
+      transition={{ 
+        duration: shouldExit ? 0.4 : 0.5,
+        ease: shouldExit ? "easeIn" : "easeInOut"
+      }}
+      className="z-30 pointer-events-none"
+      style={{
+        width: '300px',
+        minWidth: '300px'
+      }}
+    >
         {/* Thought bubble tail pointing left towards player card */}
         <div className="relative">
           <div className="absolute top-1/2 left-0 transform -translate-x-full -translate-y-1/2">
@@ -123,7 +130,6 @@ const ThoughtBubble: React.FC<ThoughtBubbleProps> = ({
           </div>
         </div>
       </motion.div>
-    </AnimatePresence>
   );
 };
 
