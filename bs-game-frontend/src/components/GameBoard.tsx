@@ -120,6 +120,8 @@ const GameBoard: React.FC<GameBoardProps> = ({
         return;
       }
       
+      console.log('✅ Processing new event:', eventId);
+      
       // Clean up old event IDs to prevent memory leaks (keep last 50)
       if (processedEventsRef.current.size > 50) {
         const eventsArray = Array.from(processedEventsRef.current);
@@ -231,6 +233,12 @@ const GameBoard: React.FC<GameBoardProps> = ({
         console.log('Showing thought bubble for:', playerId, 'reasoning:', reasoningText);
         
         setActiveThoughts(prevThoughts => {
+          const existingThought = prevThoughts.get(playerId);
+          // Don't update if the same reasoning already exists
+          if (existingThought && existingThought.reasoning === reasoningText) {
+            console.log('🎬 Skipping thought update - same reasoning already exists:', playerId);
+            return prevThoughts;
+          }
           const newThoughts = new Map(prevThoughts);
           newThoughts.set(playerId, {
             reasoning: reasoningText,
@@ -239,10 +247,15 @@ const GameBoard: React.FC<GameBoardProps> = ({
           return newThoughts;
         });
         
-        // Mark this player as animating
+        // Mark this player as animating - only if not already animating
         setAnimatingThoughts(prev => {
+          if (prev.has(playerId)) {
+            console.log('🎬 Skipping animation start - player already animating:', playerId);
+            return prev;
+          }
           const newAnimating = new Set(prev).add(playerId);
           console.log('🎬 Started animation for player:', playerId, 'Currently animating:', Array.from(newAnimating));
+          console.log('🎬 Animation triggered by eventId:', eventId);
           return newAnimating;
         });
       } else {
@@ -304,6 +317,16 @@ const GameBoard: React.FC<GameBoardProps> = ({
     };
   };
 
+  // Calculate the center of a player's card spread for better name positioning
+  const getPlayerCardSpreadCenter = (playerIndex: number, totalCards: number, playersCount: number) => {
+    const playerPos = getPlayerPosition(playerIndex, playersCount);
+    // Cards are centered around the player position horizontally
+    return {
+      x: playerPos.x, // Center of card spread
+      y: playerPos.y - 40 // Position above the cards
+    };
+  };
+
   const getCenterPilePosition = (cardIndex: number) => {
     // Position cards in a small cluster around the center (relative to center container)
     const spread = 15; // Reduced spread for better visibility
@@ -314,6 +337,27 @@ const GameBoard: React.FC<GameBoardProps> = ({
       x: Math.cos(angle * Math.PI / 180) * distance + (Math.random() - 0.5) * spread,
       y: Math.sin(angle * Math.PI / 180) * distance + (Math.random() - 0.5) * spread
     };
+  };
+
+  // Calculate the actual bounds of center pile cards for better label positioning
+  const getCenterPileBounds = () => {
+    if (centerPile.length === 0) return { minX: -60, maxX: 60, minY: -20, maxY: 20 };
+    
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    
+    centerPile.forEach((_, index) => {
+      const pos = getCenterPilePosition(index);
+      // Account for card dimensions (approximately 84px wide, 122px tall)
+      const cardHalfWidth = 42;
+      const cardHalfHeight = 61;
+      
+      minX = Math.min(minX, pos.x - cardHalfWidth);
+      maxX = Math.max(maxX, pos.x + cardHalfWidth);
+      minY = Math.min(minY, pos.y - cardHalfHeight);
+      maxY = Math.max(maxY, pos.y + cardHalfHeight);
+    });
+    
+    return { minX, maxX, minY, maxY };
   };
 
   const formatActionMessage = (action: string) => {
@@ -343,11 +387,16 @@ const GameBoard: React.FC<GameBoardProps> = ({
       return newThoughts;
     });
     
-    // Remove from animating thoughts when animation completes
+    // Remove from animating thoughts when animation completes - only if currently animating
     setAnimatingThoughts(prev => {
+      if (!prev.has(playerId)) {
+        console.log('🎬 Skipping completion - player not currently animating:', playerId);
+        return prev;
+      }
       const newAnimating = new Set(prev);
       newAnimating.delete(playerId);
       console.log('🎬 Completed animation for player:', playerId, 'Currently animating:', Array.from(newAnimating));
+      console.log('🎬 Completion triggered by playerId:', playerId);
       return newAnimating;
     });
   };
@@ -422,43 +471,51 @@ const GameBoard: React.FC<GameBoardProps> = ({
             const playerCards = playerHands[player.id] || [];
             
             // Calculate position directly (no memoization needed in loop)
-            const playerPos = getPlayerPosition(playerIndex, gameState.players.length);
+            const playerNamePos = getPlayerCardSpreadCenter(playerIndex, playerCards.length, gameState.players.length);
             
             return (
               <div key={player.id} className="absolute">
-                {/* Player info */}
-                <motion.div 
-                  className={`absolute text-white text-center font-bold p-3 rounded-lg shadow-lg ${
-                    player.is_current_player ? 'bg-yellow-600 ring-2 ring-yellow-400' : 'bg-gray-700'
-                  }`}
+                {/* Player info and thought bubble container */}
+                <div 
+                  className="absolute flex flex-row items-start gap-4"
                   style={{
-                    left: playerPos.x - 60,
-                    top: playerPos.y - 80,
+                    left: playerNamePos.x - 60,
+                    top: playerNamePos.y - 120,
                     zIndex: 20
                   }}
-                  animate={{
-                    scale: player.is_current_player ? 1.1 : 1,
-                    boxShadow: player.is_current_player ? '0 0 20px rgba(255, 255, 0, 0.5)' : '0 4px 6px rgba(0, 0, 0, 0.3)'
-                  }}
-                  transition={{ duration: 0.3 }}
                 >
-                  <div className="text-lg">{player.name}</div>
-                  <div className="text-sm opacity-80">{player.hand_count} cards</div>
-                  {player.is_current_player && (
-                    <div className="text-xs text-yellow-200">Current Turn</div>
-                  )}
-                </motion.div>
+                  {/* Player info card */}
+                  <motion.div 
+                    className={`text-white text-center font-bold p-3 rounded-lg shadow-lg ${
+                      player.is_current_player ? 'bg-yellow-600 ring-2 ring-yellow-400' : 'bg-gray-700'
+                    }`}
+                    animate={{
+                      scale: player.is_current_player ? 1.1 : 1,
+                      boxShadow: player.is_current_player ? '0 0 20px rgba(255, 255, 0, 0.5)' : '0 4px 6px rgba(0, 0, 0, 0.3)'
+                    }}
+                    transition={{ duration: 0.3 }}
+                  >
+                    <div className="text-lg">{player.name}</div>
+                    <div className="text-sm opacity-80">{player.hand_count} cards</div>
+                    {player.is_current_player && (
+                      <div className="text-xs text-yellow-200">Current Turn</div>
+                    )}
+                  </motion.div>
 
-                {/* Thought bubble with stable key and position */}
-                {activeThoughts.has(player.id) && (
-                  <ThoughtBubble
-                    key={`${player.id}-${activeThoughts.get(player.id)?.timestamp}`}
-                    playerId={player.id}
-                    reasoning={activeThoughts.get(player.id)?.reasoning || ''}
-                    position={playerPos}
-                    onComplete={() => handleThoughtBubbleComplete(player.id)}
-                  />
-                )}
+                  {/* Thought bubble next to player card */}
+                  {activeThoughts.has(player.id) && (
+                    <ThoughtBubble
+                      key={`${player.id}-thought`}
+                      playerId={player.id}
+                      reasoning={activeThoughts.get(player.id)?.reasoning || ''}
+                      position={{
+                        x: 0, // Relative to the flex container
+                        y: 0  // Relative to the flex container
+                      }}
+                      onComplete={() => handleThoughtBubbleComplete(player.id)}
+                    />
+                  )}
+                </div>
                 
                 {/* Player cards */}
                 {playerCards.map((card, cardIndex) => {
@@ -502,8 +559,14 @@ const GameBoard: React.FC<GameBoardProps> = ({
           }}
         >
           <motion.div 
-            className="text-white text-center font-bold mb-4 text-xl"
+            className="text-white text-center font-bold text-xl absolute"
             animate={{ scale: centerPile.length > 0 ? 1.1 : 1 }}
+            style={{
+              // Center the label over the actual card spread
+              left: centerPile.length > 0 ? (getCenterPileBounds().minX + getCenterPileBounds().maxX) / 2 : 0,
+              top: getCenterPileBounds().minY - 40, // Position above the cards
+              transform: 'translate(-50%, 0)'
+            }}
           >
             Center Pile ({centerPile.length} cards)
           </motion.div>

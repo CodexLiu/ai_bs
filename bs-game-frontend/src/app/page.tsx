@@ -20,7 +20,7 @@ export default function GamePage() {
   const [animatingCards, setAnimatingCards] = useState<string[]>([]);
 
   // Pan and zoom state
-  const [zoom, setZoom] = useState(1.2);
+  const [zoom, setZoom] = useState(1.0);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
@@ -51,7 +51,7 @@ export default function GamePage() {
 
   // Handle game events for animations
   const handleGameEvent = useCallback((event: any) => {
-    console.log('Game event:', event);
+    console.log('📨 Game event received:', event.type, event.timestamp);
     setLastGameEvent(event);
     
     // Handle different event types
@@ -142,7 +142,7 @@ export default function GamePage() {
   const handleWheel = useCallback((e: React.WheelEvent) => {
     e.preventDefault();
     const delta = e.deltaY > 0 ? 0.9 : 1.1;
-    setZoom(prev => Math.max(0.3, Math.min(2, prev * delta)));
+    setZoom(prev => Math.max(0.5, Math.min(2, prev * delta)));
   }, []);
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {

@@ -38,7 +38,7 @@ const ThoughtBubble: React.FC<ThoughtBubbleProps> = ({
         setIsTyping(false);
         clearInterval(typeInterval);
         
-        // Start fade out after 3 seconds
+        // Start minimize animation after 3 seconds
         setTimeout(() => {
           onComplete?.();
         }, 3000);
@@ -46,7 +46,7 @@ const ThoughtBubble: React.FC<ThoughtBubbleProps> = ({
     }, 20); // Typing speed - much faster
 
     return () => clearInterval(typeInterval);
-  }, [reasoning, onComplete]);
+  }, [reasoning]);
 
   // Cursor blinking effect
   useEffect(() => {
@@ -64,23 +64,31 @@ const ThoughtBubble: React.FC<ThoughtBubbleProps> = ({
       <motion.div
         initial={{ opacity: 0, scale: 0.8, y: 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.8, y: -20 }}
-        transition={{ 
-          duration: 0.3,
-          ease: "easeOut"
+        exit={{ 
+          opacity: 0, 
+          scale: 0.1, 
+          x: -200, // Move towards the player card (to the left)
+          y: 10,   // Slight downward movement
+          rotate: -10 // Slight rotation for dynamic effect
         }}
-        className="absolute z-30 pointer-events-none"
+        transition={{ 
+          duration: 0.5,
+          ease: "easeInOut",
+          exit: {
+            duration: 0.4,
+            ease: "easeIn"
+          }
+        }}
+        className="z-30 pointer-events-none"
         style={{
-          left: position.x - 150, // Center the bubble
-          top: position.y - 90,   // Position where bottom of bubble should be
           width: '300px',
-          transform: 'translateY(-100%)' // Make bubble grow upward from this point
+          minWidth: '300px'
         }}
       >
-        {/* Thought bubble tail */}
+        {/* Thought bubble tail pointing left towards player card */}
         <div className="relative">
-          <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 translate-y-full">
-            <div className="w-0 h-0 border-l-[15px] border-r-[15px] border-t-[20px] border-l-transparent border-r-transparent border-t-gray-900"></div>
+          <div className="absolute top-1/2 left-0 transform -translate-x-full -translate-y-1/2">
+            <div className="w-0 h-0 border-t-[15px] border-b-[15px] border-r-[20px] border-t-transparent border-b-transparent border-r-gray-900"></div>
           </div>
           
           {/* Main bubble */}
