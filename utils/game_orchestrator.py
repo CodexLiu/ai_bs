@@ -4,6 +4,7 @@ from .game_state_manager import GameStateManager
 from .context_manager import ContextManager
 from .ai_player import AIPlayer
 from .game_logger import GameLogger, LogLevel
+from generate_reaction import ReactionGenerator
 
 class GameOrchestrator:
     def __init__(self, 
@@ -26,6 +27,7 @@ class GameOrchestrator:
         self.game_state = GameStateManager(self.player_ids)
         self.context_manager = ContextManager(self.game_state)
         self.logger = GameLogger(log_mode)
+        self.reaction_generator = ReactionGenerator()
         
         # Initialize AI players
         self.players = {}
@@ -266,8 +268,53 @@ class GameOrchestrator:
         
         print(f"🔍 DEBUG: BS call notification sent successfully")
         
+        # Add a small delay to allow frontend to process the BS call before showing reactions
+        time.sleep(1.0)
+        
+        # Generate and send reactions for both players
+        self._send_reactions_for_bs_call(caller_id, target_player, was_bs)
+        
         # Add a small delay to allow frontend to set up animations
         time.sleep(0.5)
+    
+    def _send_reactions_for_bs_call(self, caller_id: str, target_player: str, was_bs: bool):
+        """Send reactions for both players involved in BS call"""
+        print(f"🔍 DEBUG: Generating reactions for BS call - caller: {caller_id}, target: {target_player}, was_bs: {was_bs}")
+        
+        # Generate reactions based on the outcome
+        if was_bs:
+            # Caller was correct, target was bluffing
+            caller_reaction = self.reaction_generator.get_reaction_for_scenario("correct_bs_call")
+            target_reaction = self.reaction_generator.get_reaction_for_scenario("caught_bluffing")
+        else:
+            # Caller was incorrect, target was truthful
+            caller_reaction = self.reaction_generator.get_reaction_for_scenario("incorrect_bs_call")
+            target_reaction = "Thanks for trusting me! 😊"  # Target doesn't need a reaction, they were truthful
+        
+        # Send caller's reaction
+        self._notify_action("player_reaction", {
+            "player_id": caller_id,
+            "reaction": caller_reaction,
+            "reaction_type": "correct_bs_call" if was_bs else "incorrect_bs_call"
+        })
+        
+        print(f"🔍 DEBUG: Sent reaction for caller {caller_id}: {caller_reaction}")
+        
+        # Small delay between reactions to ensure proper frontend rendering
+        time.sleep(0.5)
+        
+        # Send target's reaction (only if they were caught bluffing)
+        if was_bs:
+            self._notify_action("player_reaction", {
+                "player_id": target_player,
+                "reaction": target_reaction,
+                "reaction_type": "caught_bluffing"
+            })
+            
+            print(f"🔍 DEBUG: Sent reaction for target {target_player}: {target_reaction}")
+        
+        # Add longer delay after reactions to ensure they're fully displayed before continuing
+        time.sleep(2.0)
     
     def _handle_potential_bs_calls(self, current_player_id: str) -> bool:
         """Allow only the next player in turn order to call BS on the current player's move"""

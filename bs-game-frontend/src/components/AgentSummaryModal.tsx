@@ -92,7 +92,7 @@ const AgentSummaryModal: React.FC<AgentSummaryModalProps> = ({
                     <span className="text-green-400">{'>'}</span> no data available
                   </div>
                   <div className="text-yellow-300 text-sm mt-2">
-                    <span className="text-green-400">{'>'}</span> agent needs to play at least 8 turns
+                    <span className="text-green-400">{'>'}</span> agent needs to play at least 4 turns
                   </div>
                 </div>
               ) : (

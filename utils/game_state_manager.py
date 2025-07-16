@@ -1,7 +1,7 @@
 from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass
 from enum import Enum
-from .card_system import Card, Deck, Rank
+from .card_system import Deck, Card, Rank, Suit
 
 class GamePhase(Enum):
     SETUP = "setup"
@@ -43,7 +43,12 @@ class GameStateManager:
             last_action=None
         )
         self.deck = Deck()
+        self.context_manager = None  # Will be set by the context manager
         self._setup_game()
+    
+    def set_context_manager(self, context_manager):
+        """Set the context manager reference for tracking actions"""
+        self.context_manager = context_manager
     
     def _setup_game(self):
         """Initialize the game by dealing cards to all players"""
@@ -131,6 +136,9 @@ class GameStateManager:
             else:
                 return False
         
+        # Determine if this was a truthful play
+        was_truthful = all(card.rank == claimed_rank for card in cards)
+        
         # Add to center pile
         played_cards = PlayedCards(
             cards=cards,
@@ -140,6 +148,15 @@ class GameStateManager:
             turn_number=self.game_state.turn_number
         )
         self.game_state.center_pile.append(played_cards)
+        
+        # Track this action in context manager
+        if self.context_manager:
+            self.context_manager.add_game_action("play_cards", player_id, {
+                "claimed_count": claimed_count,
+                "claimed_rank": self.get_expected_rank_name(),
+                "was_truthful": was_truthful,
+                "actual_cards": [f"{card.rank.value} of {card.suit.value}" for card in cards]
+            })
         
         # Check if player won
         if len(self.game_state.player_hands[player_id]) == 0:
@@ -161,18 +178,38 @@ class GameStateManager:
             return False, "Cannot call BS on yourself"
         
         last_play = self.game_state.center_pile[-1]
+        target_player = last_play.player_id
+        
+        # Track the BS call in context manager
+        if self.context_manager:
+            self.context_manager.add_game_action("call_bs", caller_id, {
+                "target_player": target_player
+            })
         
         # Check if the last play was actually BS
         actual_ranks = [card.rank for card in last_play.cards]
         claimed_rank = last_play.claimed_rank
         
         was_bs = not all(rank == claimed_rank for rank in actual_ranks)
+        penalty_cards = self.get_center_pile_count()
         
         if was_bs:
             # BS was called correctly - last player takes all cards
             self._player_takes_center_pile(last_play.player_id)
             result_msg = f"{caller_id} correctly called BS on {last_play.player_id}"
             self.game_state.last_action = result_msg
+            
+            # Track the BS result
+            if self.context_manager:
+                self.context_manager.add_game_action("bs_result", caller_id, {
+                    "was_correct": True,
+                    "caller": caller_id,
+                    "target_player": target_player,
+                    "penalty_cards": penalty_cards,
+                    "was_bluffing": True,
+                    "caught_player": target_player
+                })
+            
             # Person who called BS gets to play next with the next rank
             old_index = self.game_state.current_player_index
             old_player = self.game_state.player_order[old_index]
@@ -185,6 +222,18 @@ class GameStateManager:
             self._player_takes_center_pile(caller_id)
             result_msg = f"{caller_id} incorrectly called BS on {last_play.player_id}"
             self.game_state.last_action = result_msg
+            
+            # Track the BS result
+            if self.context_manager:
+                self.context_manager.add_game_action("bs_result", caller_id, {
+                    "was_correct": False,
+                    "caller": caller_id,
+                    "target_player": target_player,
+                    "penalty_cards": penalty_cards,
+                    "was_bluffing": False,
+                    "caught_player": caller_id
+                })
+            
             # Turn advances to next player in sequence after incorrect BS call
             old_index = self.game_state.current_player_index
             old_player = self.game_state.player_order[old_index]

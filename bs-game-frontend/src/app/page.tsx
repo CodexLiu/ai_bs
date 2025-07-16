@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import GameBoard from '@/components/GameBoard';
 import AgentSummaryModal from '@/components/AgentSummaryModal';
 import GameApi from '@/lib/gameApi';
-import { Card, GameUIState } from '@/types/game';
+import { Card, GameUIState, Rank } from '@/types/game';
 
 export default function GamePage() {
   const [gameState, setGameState] = useState<GameUIState | null>(null);
@@ -105,7 +105,51 @@ export default function GamePage() {
       const action = event.action;
       console.log('Action:', action);
       
-      if (action.type === 'card_play') {
+      // Handle turn_start events to immediately update current player
+      if (action.type === 'turn_start') {
+        const currentPlayerId = action.data.player_id;
+        console.log('Turn start for player:', currentPlayerId);
+        
+        // Convert rank name to Rank enum
+        const convertRank = (rankName: string): Rank => {
+          const rankMap: Record<string, Rank> = {
+            'Ace': Rank.ACE,
+            '2': Rank.TWO,
+            '3': Rank.THREE,
+            '4': Rank.FOUR,
+            '5': Rank.FIVE,
+            '6': Rank.SIX,
+            '7': Rank.SEVEN,
+            '8': Rank.EIGHT,
+            '9': Rank.NINE,
+            '10': Rank.TEN,
+            'Jack': Rank.JACK,
+            'Queen': Rank.QUEEN,
+            'King': Rank.KING
+          };
+          return rankMap[rankName] || Rank.ACE;
+        };
+        
+        // Immediately update the current player in the game state
+        setGameState(prevState => {
+          if (!prevState) return prevState;
+          
+          const updatedPlayers = prevState.players.map(player => ({
+            ...player,
+            is_current_player: player.id === currentPlayerId
+          }));
+          
+          return {
+            ...prevState,
+            players: updatedPlayers,
+            turn_number: action.data.turn_number,
+            current_expected_rank: convertRank(action.data.expected_rank)
+          };
+        });
+        
+        // Still refresh game state but don't wait for it
+        refreshGameState();
+      } else if (action.type === 'card_play') {
         // Set animating cards for smooth transitions
         const playedCards = action.data.actual_cards || [];
         console.log('Played cards:', playedCards);

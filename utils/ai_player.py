@@ -37,24 +37,18 @@ class AIPlayer:
         try:
             # Check if we need to summarize context before proceeding
             if self.context_manager.should_summarize_context(self.player_id):
-                # Run summarization asynchronously
                 try:
-                    # Create a new event loop if one doesn't exist
-                    loop = asyncio.get_event_loop()
-                except RuntimeError:
-                    loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(loop)
-                
-                try:
-                    loop.run_until_complete(
+                    # Use asyncio.run() for proper async execution
+                    asyncio.run(
                         self.context_manager.summarize_and_prune_context(
                             self.player_id, 
                             self.personality, 
                             self.play_style
                         )
                     )
+                    print(f"✅ DEBUG: Context summarized for {self.player_id}")
                 except Exception as e:
-                    print(f"Error during context summarization for {self.player_id}: {e}")
+                    print(f"❌ ERROR: Context summarization failed for {self.player_id}: {e}")
             
             # Generate system prompt with current game state
             system_prompt = self.context_manager.generate_system_prompt(

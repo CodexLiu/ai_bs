@@ -5,11 +5,270 @@ from .card_system import Card, Rank
 class ContextManager:
     def __init__(self, game_state_manager: GameStateManager):
         self.game_state_manager = game_state_manager
+        # Set the context manager reference in the game state manager
+        self.game_state_manager.set_context_manager(self)
         # Track conversation history for each player
         self.conversation_history: Dict[str, List[Dict[str, Any]]] = {}
         # Track player summaries for each player
         self.player_summaries: Dict[str, Dict[str, Any]] = {}
+        # Track global game action history that all players can see
+        self.global_game_history: List[Dict[str, Any]] = []
+        # Track player behavior patterns
+        self.player_patterns: Dict[str, Dict[str, Any]] = {}
+        
+        # Clean up any existing invalid data
+        self.clean_invalid_player_data()
     
+    def add_game_action(self, action_type: str, player_id: str, details: Dict[str, Any]):
+        """
+        Add a game action to the global history that all players can see.
+        
+        Args:
+            action_type: Type of action (play_cards, call_bs, bs_result)
+            player_id: ID of the player who performed the action
+            details: Additional details about the action
+        """
+        # Validate player_id
+        if not player_id or player_id.strip() == "":
+            print(f"❌ ERROR: Invalid player_id '{player_id}' in add_game_action")
+            return
+        
+        # Validate that player_id is in the game
+        if player_id not in self.game_state_manager.player_ids:
+            print(f"❌ ERROR: Player ID '{player_id}' not found in game player list: {self.game_state_manager.player_ids}")
+            return
+        
+        # Validate details for specific action types
+        if action_type == "call_bs":
+            target_player = details.get("target_player")
+            if not target_player or target_player not in self.game_state_manager.player_ids:
+                print(f"❌ ERROR: Invalid target_player '{target_player}' in call_bs action")
+                return
+        
+        if action_type == "bs_result":
+            caller = details.get("caller")
+            target_player = details.get("target_player")
+            if not caller or caller not in self.game_state_manager.player_ids:
+                print(f"❌ ERROR: Invalid caller '{caller}' in bs_result action")
+                return
+            if not target_player or target_player not in self.game_state_manager.player_ids:
+                print(f"❌ ERROR: Invalid target_player '{target_player}' in bs_result action")
+                return
+        
+        action_entry = {
+            "turn_number": self.game_state_manager.get_turn_number(),
+            "action_type": action_type,
+            "player_id": player_id,
+            "details": details,
+            "timestamp": self.game_state_manager.get_turn_number()
+        }
+        
+        self.global_game_history.append(action_entry)
+        
+        # Update player patterns
+        if player_id not in self.player_patterns:
+            self.player_patterns[player_id] = {
+                "cards_played": 0,
+                "bs_calls_made": 0,
+                "bs_calls_correct": 0,
+                "times_caught_bluffing": 0,
+                "times_played_truthfully": 0,
+                "recent_actions": []
+            }
+        
+        patterns = self.player_patterns[player_id]
+        patterns["recent_actions"].append(action_entry)
+        
+        # Keep only last 10 actions per player
+        if len(patterns["recent_actions"]) > 10:
+            patterns["recent_actions"] = patterns["recent_actions"][-10:]
+        
+        # Update specific pattern counters
+        if action_type == "play_cards":
+            patterns["cards_played"] += details.get("claimed_count", 0)
+            if details.get("was_truthful", False):
+                patterns["times_played_truthfully"] += 1
+        elif action_type == "call_bs":
+            patterns["bs_calls_made"] += 1
+        elif action_type == "bs_result":
+            # Update BS call success for the caller
+            caller = details.get("caller")
+            if caller == player_id and details.get("was_correct", False):
+                patterns["bs_calls_correct"] += 1
+            # Update bluffing counts
+            if details.get("was_bluffing", False) and details.get("caught_player") == player_id:
+                patterns["times_caught_bluffing"] += 1
+    
+    def clean_invalid_player_data(self):
+        """
+        Clean up any invalid player data that might have been stored.
+        This includes removing entries with None, empty strings, or "unknown" player IDs.
+        """
+        print("🧹 Cleaning up invalid player data from context manager...")
+        
+        # Clean up conversation history
+        invalid_conversation_keys = []
+        for player_id in self.conversation_history.keys():
+            if not player_id or player_id.strip() == "" or player_id == "unknown" or player_id not in self.game_state_manager.player_ids:
+                invalid_conversation_keys.append(player_id)
+        
+        for key in invalid_conversation_keys:
+            print(f"🧹 Removing invalid conversation history for player: '{key}'")
+            del self.conversation_history[key]
+        
+        # Clean up player summaries
+        invalid_summary_keys = []
+        for player_id in self.player_summaries.keys():
+            if not player_id or player_id.strip() == "" or player_id == "unknown" or player_id not in self.game_state_manager.player_ids:
+                invalid_summary_keys.append(player_id)
+        
+        for key in invalid_summary_keys:
+            print(f"🧹 Removing invalid player summary for player: '{key}'")
+            del self.player_summaries[key]
+        
+        # Clean up player patterns
+        invalid_pattern_keys = []
+        for player_id in self.player_patterns.keys():
+            if not player_id or player_id.strip() == "" or player_id == "unknown" or player_id not in self.game_state_manager.player_ids:
+                invalid_pattern_keys.append(player_id)
+        
+        for key in invalid_pattern_keys:
+            print(f"🧹 Removing invalid player pattern for player: '{key}'")
+            del self.player_patterns[key]
+        
+        # Clean up global game history - remove actions with invalid player IDs
+        valid_history = []
+        for action in self.global_game_history:
+            player_id = action.get("player_id")
+            if player_id and player_id.strip() != "" and player_id != "unknown" and player_id in self.game_state_manager.player_ids:
+                # Also validate details in the action
+                details = action.get("details", {})
+                action_type = action.get("action_type")
+                
+                is_valid = True
+                if action_type == "call_bs":
+                    target_player = details.get("target_player")
+                    if not target_player or target_player not in self.game_state_manager.player_ids:
+                        is_valid = False
+                elif action_type == "bs_result":
+                    caller = details.get("caller")
+                    target_player = details.get("target_player")
+                    if not caller or caller not in self.game_state_manager.player_ids:
+                        is_valid = False
+                    if not target_player or target_player not in self.game_state_manager.player_ids:
+                        is_valid = False
+                
+                if is_valid:
+                    valid_history.append(action)
+                else:
+                    print(f"🧹 Removing invalid action from history: {action}")
+            else:
+                print(f"🧹 Removing action with invalid player_id '{player_id}' from history")
+        
+        self.global_game_history = valid_history
+        
+        print(f"✅ Cleanup complete. Valid players: {self.game_state_manager.player_ids}")
+    
+    def get_game_history_summary(self, max_actions: int = 15) -> str:
+        """
+        Get a formatted summary of recent game actions that all players can see.
+        
+        Args:
+            max_actions: Maximum number of recent actions to include
+            
+        Returns:
+            Formatted string of recent game history
+        """
+        if not self.global_game_history:
+            return "No actions yet this game."
+        
+        # Get the most recent actions
+        recent_actions = self.global_game_history[-max_actions:]
+        
+        history_lines = []
+        for action in recent_actions:
+            turn = action["turn_number"]
+            action_type = action["action_type"]
+            player = action["player_id"]
+            details = action["details"]
+            
+            if action_type == "play_cards":
+                claimed_count = details.get("claimed_count", 0)
+                claimed_rank = details.get("claimed_rank", "Unknown")
+                was_truthful = details.get("was_truthful")
+                if was_truthful is not None:
+                    truth_indicator = " (truthful)" if was_truthful else " (bluffing)"
+                else:
+                    truth_indicator = ""
+                history_lines.append(f"Turn {turn}: {player} played {claimed_count} {claimed_rank}{'s' if claimed_count != 1 else ''}{truth_indicator}")
+            
+            elif action_type == "call_bs":
+                target = details.get("target_player")
+                if target and target in self.game_state_manager.player_ids:
+                    history_lines.append(f"Turn {turn}: {player} called BS on {target}")
+                else:
+                    print(f"❌ WARNING: Invalid target_player in call_bs history: {target}")
+                    history_lines.append(f"Turn {turn}: {player} called BS on [invalid player]")
+            
+            elif action_type == "bs_result":
+                was_correct = details.get("was_correct", False)
+                caller = details.get("caller")
+                target = details.get("target_player")
+                penalty_cards = details.get("penalty_cards", 0)
+                
+                # Validate caller and target
+                if not caller or caller not in self.game_state_manager.player_ids:
+                    print(f"❌ WARNING: Invalid caller in bs_result history: {caller}")
+                    caller = "[invalid player]"
+                if not target or target not in self.game_state_manager.player_ids:
+                    print(f"❌ WARNING: Invalid target_player in bs_result history: {target}")
+                    target = "[invalid player]"
+                
+                if was_correct:
+                    history_lines.append(f"Turn {turn}: BS call CORRECT - {target} takes {penalty_cards} cards")
+                else:
+                    history_lines.append(f"Turn {turn}: BS call WRONG - {caller} takes {penalty_cards} cards")
+        
+        return "\n".join(history_lines)
+    
+    def get_player_behavior_summary(self) -> str:
+        """
+        Get a summary of player behavior patterns that all players can observe.
+        
+        Returns:
+            Formatted string of player behavior patterns
+        """
+        if not self.player_patterns:
+            return "No player patterns established yet."
+        
+        behavior_lines = []
+        for player_id, patterns in self.player_patterns.items():
+            # Validate player_id
+            if not player_id or player_id not in self.game_state_manager.player_ids:
+                print(f"❌ WARNING: Invalid player_id '{player_id}' in player patterns, skipping")
+                continue
+                
+            cards_played = patterns["cards_played"]
+            bs_calls = patterns["bs_calls_made"]
+            bs_accuracy = patterns["bs_calls_correct"]
+            times_caught = patterns["times_caught_bluffing"]
+            times_truthful = patterns["times_played_truthfully"]
+            
+            # Calculate percentages
+            bs_success_rate = (bs_accuracy / bs_calls * 100) if bs_calls > 0 else 0
+            total_plays = times_caught + times_truthful
+            truthful_rate = (times_truthful / total_plays * 100) if total_plays > 0 else 0
+            
+            behavior_summary = f"{player_id}: {cards_played} cards played"
+            if bs_calls > 0:
+                behavior_summary += f", {bs_calls} BS calls ({bs_success_rate:.0f}% success)"
+            if total_plays > 0:
+                behavior_summary += f", {truthful_rate:.0f}% truthful plays"
+            
+            behavior_lines.append(behavior_summary)
+        
+        return "\n".join(behavior_lines)
+
     def add_conversation_turn(self, player_id: str, system_prompt: str, user_message: str, assistant_response: str, reasoning: str = ""):
         """
         Add a conversation turn to the history for a player.
@@ -38,13 +297,15 @@ class ContextManager:
         return self.conversation_history.get(player_id, [])
     
     def should_summarize_context(self, player_id: str) -> bool:
-        """Check if context should be summarized (8+ turns)."""
+        """Check if context should be summarized (4+ turns)."""
         history = self.get_conversation_history(player_id)
-        return len(history) >= 8
-    
+        should_summarize = len(history) >= 4
+        print(f"🔍 DEBUG: Player {player_id} history length: {len(history)}, should_summarize: {should_summarize}")
+        return should_summarize
+
     async def summarize_and_prune_context(self, player_id: str, personality: str, play_style: str, model: str = "gpt-4o-mini"):
         """
-        Summarize the first 6 turns and delete them, using agent personality for reflection.
+        Summarize the first 2 turns and delete them, using agent personality for reflection.
         
         Args:
             player_id: The ID of the player
@@ -55,11 +316,11 @@ class ContextManager:
         from .openai_api_call import call_openai_api
         
         history = self.get_conversation_history(player_id)
-        if len(history) < 6:
+        if len(history) < 2:
             return
         
-        # Get first 6 turns to summarize
-        turns_to_summarize = history[:6]
+        # Get first 2 turns to summarize
+        turns_to_summarize = history[:2]
         
         # Create summarization prompt
         summarization_prompt = f"""You are {player_id} reflecting on your game experience so far. 
@@ -133,7 +394,7 @@ Respond only with valid JSON."""
             }
             
             # Remove the summarized turns from history
-            self.conversation_history[player_id] = history[6:]
+            self.conversation_history[player_id] = history[2:]
             
         except Exception as e:
             print(f"Error summarizing context for {player_id}: {e}")
@@ -163,6 +424,8 @@ Respond only with valid JSON."""
         # Base game rules and context
         base_prompt = f"""You are playing the card game BS (also known as Bullshit or Cheat). 
 
+THE GOAL: Get rid of all your cards before other players do.
+
 GAME RULES:
 - Players take turns playing cards face-down, claiming they are of the expected rank
 - You can tell the truth OR bluff about what cards you're playing
@@ -171,12 +434,20 @@ GAME RULES:
 - If BS is called incorrectly, the caller takes all cards from the center pile
 - First player to get rid of all their cards wins
 
+⚠️ CRITICAL WARNING ABOUT CALLING BS:
+- If you call BS and you're WRONG, you must take ALL {context['center_pile_count']} cards from the center pile
+- This means your hand size would go from {context['hand_count']} cards to {context['hand_count'] + context['center_pile_count']} cards
+- Taking {context['center_pile_count']} cards is a MASSIVE setback that could ruin your chances of winning
+- Only call BS if you're absolutely confident the person is lying
+- Most of the time, it's better to let questionable plays go rather than risk taking all those cards
+- Remember: You win by getting rid of YOUR cards, not by catching other people's lies
+
 CURRENT GAME STATE:
 - You are: {player_id}
 - Turn number: {context['turn_number']}
 - Current player: {context['current_player']}
 - Expected rank for this turn: {context['expected_rank_name']}
-- Cards in center pile: {context['center_pile_count']}
+- Cards in center pile: {context['center_pile_count']} (THIS IS HOW MANY CARDS YOU'LL TAKE IF YOU CALL BS INCORRECTLY!)
 - Your hand size: {context['hand_count']}"""
 
         # Add hand information
@@ -189,9 +460,17 @@ CURRENT GAME STATE:
             other_players_info.append(f"{pid}: {count} cards")
         base_prompt += f"\n- Other players: {', '.join(other_players_info)}"
         
+        # Add comprehensive game history
+        game_history = self.get_game_history_summary()
+        base_prompt += f"\n\nGAME HISTORY (what everyone can observe):\n{game_history}"
+        
+        # Add player behavior patterns
+        behavior_summary = self.get_player_behavior_summary()
+        base_prompt += f"\n\nPLAYER BEHAVIOR PATTERNS:\n{behavior_summary}"
+        
         # Add recent action if available
         if context['last_action']:
-            base_prompt += f"\n- Last action: {context['last_action']}"
+            base_prompt += f"\n\nMOST RECENT ACTION: {context['last_action']}"
         
         # Add summarized context if available
         summary = self.get_player_summary(player_id)
@@ -220,9 +499,7 @@ IT'S YOUR TURN TO PLAY:
 - You MUST play cards and claim they are {context['expected_rank_name']}s
 - You can play 1-4 cards
 - Use the play_cards function with card indices from your hand
-- You can tell the truth or bluff - both are valid strategies
-- Consider what cards others might have and your winning chances
-- IMPORTANT: You cannot pass, call BS, or do anything else - you MUST play cards"""
+- You can tell the truth or bluff - both are valid strategies"""
         else:
             next_player = self.game_state_manager.get_next_player()
             base_prompt += f"""
@@ -232,8 +509,12 @@ IT'S NOT YOUR TURN:
 - Only the next player in turn order ({next_player}) can call BS
 - If you are {next_player}, you can call BS if you think they were lying
 - If you are not {next_player}, you must wait for your turn
-- Consider: Do you have cards that make their claim unlikely?
-- IMPORTANT: You don't need to "pass" - just don't call BS if you believe them or if it's not your turn to call BS"""
+
+⚠️ BEFORE YOU CALL BS - THINK CAREFULLY:
+- Are you absolutely certain they're lying? If there's any doubt, DON'T call BS
+- If you're wrong, you'll take all {context['center_pile_count']} cards and go from {context['hand_count']} to {context['hand_count'] + context['center_pile_count']} cards
+- That's a {context['center_pile_count']}-card penalty that could destroy your winning chances
+- Unless you're 100% sure or it's absolutely necessary, let them have their turn"""
         
         # Add personality and play style
         if personality:
@@ -242,73 +523,16 @@ IT'S NOT YOUR TURN:
         if play_style:
             base_prompt += f"\n\nYOUR PLAY STYLE: {play_style}"
         
-        # Add comprehensive strategy considerations
+        # Simple reminders without strategic guidance
         base_prompt += f"""
 
-WINNING CONDITIONS AND STRATEGIC ANALYSIS:
-- OBJECTIVE: Be the first player to get rid of all your cards
-- Current threat assessment based on card counts:
-  * You have {context['hand_count']} cards - {'Very close to winning!' if context['hand_count'] <= 3 else 'Close to winning' if context['hand_count'] <= 6 else 'Mid-game' if context['hand_count'] <= 10 else 'Early game'}
-  * Opponents: {', '.join([f"{pid} has {count} cards" for pid, count in context['other_players_hand_counts'].items()])}
-  * Center pile: {context['center_pile_count']} cards (high risk/reward for BS calls)
-
-DECISION IMPACT ANALYSIS:
-- If you make a CORRECT play (truth or successful bluff):
-  * You reduce your hand size and move closer to winning
-  * Opponents must decide whether to call BS (risk vs reward)
-  * You maintain control of the game flow
-
-- If you make an INCORRECT play (caught bluffing):
-  * You take ALL {context['center_pile_count']} cards from center pile
-  * Your hand size increases significantly, moving you away from winning
-  * Other players gain strategic advantage
-
-- If you call BS CORRECTLY:
-  * The liar takes all {context['center_pile_count']} cards from center pile
-  * You don't take any cards and maintain your position
-  * You prevent a potentially winning move by the liar
-
-- If you call BS INCORRECTLY:
-  * YOU take all {context['center_pile_count']} cards from center pile
-  * Your hand size increases by {context['center_pile_count']} cards
-  * The player you called BS on gets closer to winning
-  * This is a MAJOR setback - only call BS when confident!
-
-CARD COUNT STRATEGIC IMPLICATIONS:
-- Players with very few cards (1-3): IMMEDIATE WINNING THREAT
-  * Be extremely suspicious of their plays
-  * Consider aggressive BS calls to prevent them from winning
-  * They may be more likely to bluff to get rid of remaining cards
-  
-- Players with moderate cards (4-8): ACTIVE COMPETITORS
-  * Monitor their plays carefully
-  * They balance risk vs reward in their decisions
-  * Good targets for strategic BS calls if caught bluffing
-  
-- Players with many cards (9+): LESS IMMEDIATE THREAT
-  * May play more conservatively to avoid taking more cards
-  * Less likely to make risky bluffs
-  * Focus on your own game vs these players
-
-CENTER PILE RISK ASSESSMENT:
-- Current center pile: {context['center_pile_count']} cards
-- Risk level: {'EXTREME' if context['center_pile_count'] >= 15 else 'HIGH' if context['center_pile_count'] >= 10 else 'MODERATE' if context['center_pile_count'] >= 5 else 'LOW'}
-- Taking these cards would {'devastate your position' if context['center_pile_count'] >= 15 else 'seriously hurt your chances' if context['center_pile_count'] >= 10 else 'set you back significantly' if context['center_pile_count'] >= 5 else 'slightly impact your position'}
-
-STRATEGY CONSIDERATIONS:
-- Early game: Focus on getting rid of cards efficiently, build read on opponents
-- Mid game: Pay attention to what cards have been played, start tactical thinking
-- Late game: Be more aggressive with BS calls when players are close to winning
-- Bluffing: Mix truth and lies to keep opponents guessing, but consider the risk
-- Calling BS: Consider probability based on cards you've seen and hold, and the center pile size
-
-IMPORTANT REMINDERS:
-- You can only see your own cards, not others' cards
-- Cards are played face-down, so you don't know what was actually played until BS is called
+REMEMBER:
+- Play according to your personality and instincts
 - Use function calls to take your action
 - Always provide reasoning for your decisions
-- Consider both immediate and long-term consequences of every action
-- The center pile size makes BS calls increasingly risky as the game progresses"""
+- CALLING BS INCORRECTLY MEANS TAKING ALL {context['center_pile_count']} CARDS - THIS IS A MASSIVE PENALTY!
+- Focus on getting rid of your own cards, not on catching others
+- When in doubt about calling BS, DON'T call it - the risk is too high"""
         
         return base_prompt
     
@@ -395,14 +619,14 @@ IMPORTANT REMINDERS:
         
         return {
             "player_id": player_id,
-            "turn_number": context['turn_number'],
-            "is_my_turn": context['is_my_turn'],
-            "current_player": context['current_player'],
-            "expected_rank": context['expected_rank_name'],
-            "hand_size": context['hand_count'],
-            "center_pile_size": context['center_pile_count'],
-            "other_players": context['other_players_hand_counts'],
-            "last_action": context['last_action'],
-            "game_phase": context['game_phase'].value,
-            "winner": context['winner']
+            "hand_size": context["hand_count"],
+            "other_players_hand_counts": context["other_players_hand_counts"],
+            "center_pile_size": context["center_pile_count"],
+            "current_player": context["current_player"],
+            "is_my_turn": context["is_my_turn"],
+            "expected_rank": context["expected_rank_name"],
+            "turn_number": context["turn_number"],
+            "last_action": context["last_action"],
+            "game_phase": context["game_phase"],
+            "winner": context["winner"]
         } 

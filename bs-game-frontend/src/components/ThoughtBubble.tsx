@@ -17,6 +17,20 @@ const ThoughtBubble: React.FC<ThoughtBubbleProps> = ({
   const [displayText, setDisplayText] = useState('');
   const [isTyping, setIsTyping] = useState(true);
   const [showCursor, setShowCursor] = useState(true);
+  const [animatedEllipsis, setAnimatedEllipsis] = useState('.');
+
+  // Animated ellipsis effect for "thinking..."
+  useEffect(() => {
+    if (reasoning === 'thinking...') {
+      let dotCount = 1;
+      const ellipsisInterval = setInterval(() => {
+        setAnimatedEllipsis('.'.repeat(dotCount));
+        dotCount = dotCount === 3 ? 1 : dotCount + 1;
+      }, 500);
+
+      return () => clearInterval(ellipsisInterval);
+    }
+  }, [reasoning]);
 
   useEffect(() => {
     if (!reasoning) return;
@@ -58,6 +72,17 @@ const ThoughtBubble: React.FC<ThoughtBubbleProps> = ({
   }, []);
 
   if (!reasoning) return null;
+
+  // Get the display text - use animated ellipsis for "thinking..."
+  const getDisplayText = () => {
+    if (reasoning === 'thinking...') {
+      return `thinking${animatedEllipsis}`;
+    }
+    return displayText;
+  };
+
+  // Don't show cursor for "thinking..." animation
+  const shouldShowCursor = isTyping && showCursor && reasoning !== 'thinking...';
 
   return (
     <AnimatePresence>
@@ -113,8 +138,8 @@ const ThoughtBubble: React.FC<ThoughtBubbleProps> = ({
               <div className="text-green-300 min-h-[20px] flex items-start">
                 <span className="text-green-400 mr-2">{'>'}</span>
                 <span className="flex-1">
-                  {displayText}
-                  {isTyping && showCursor && (
+                  {getDisplayText()}
+                  {shouldShowCursor && (
                     <span className="text-green-400 animate-pulse">▋</span>
                   )}
                 </span>
