@@ -33,7 +33,6 @@ const GameBoard: React.FC<GameBoardProps> = ({
   const [animatingFromCenter, setAnimatingFromCenter] = useState<Map<string, { from: any, to: any }>>(new Map());
   const [activeThoughts, setActiveThoughts] = useState<Map<string, { reasoning: string, timestamp: number }>>(new Map());
   const [animatingThoughts, setAnimatingThoughts] = useState<Set<string>>(new Set());
-  const [exitingThoughts, setExitingThoughts] = useState<Set<string>>(new Set());
   const processedEventsRef = useRef<Set<string>>(new Set());
 
   // Terminal animation states
@@ -384,8 +383,11 @@ const GameBoard: React.FC<GameBoardProps> = ({
 
   // Handle thought bubble completion
   const handleThoughtBubbleComplete = (playerId: string) => {
-    // First mark the thought bubble for exit animation
-    setExitingThoughts(prev => new Set(prev).add(playerId));
+    setActiveThoughts(prevThoughts => {
+      const newThoughts = new Map(prevThoughts);
+      newThoughts.delete(playerId);
+      return newThoughts;
+    });
     
     // Remove from animating thoughts when animation completes - only if currently animating
     setAnimatingThoughts(prev => {
@@ -399,20 +401,6 @@ const GameBoard: React.FC<GameBoardProps> = ({
       console.log('🎬 Completion triggered by playerId:', playerId);
       return newAnimating;
     });
-    
-    // Remove from active thoughts after exit animation duration
-    setTimeout(() => {
-      setActiveThoughts(prevThoughts => {
-        const newThoughts = new Map(prevThoughts);
-        newThoughts.delete(playerId);
-        return newThoughts;
-      });
-      setExitingThoughts(prev => {
-        const newExiting = new Set(prev);
-        newExiting.delete(playerId);
-        return newExiting;
-      });
-    }, 400); // Match the exit animation duration
   };
 
   // Get the center container position for consistent positioning
@@ -560,21 +548,18 @@ const GameBoard: React.FC<GameBoardProps> = ({
                   </motion.div>
 
                   {/* Thought bubble next to player card */}
-                  <AnimatePresence>
-                    {activeThoughts.has(player.id) && (
-                      <ThoughtBubble
-                        key={`${player.id}-thought`}
-                        playerId={player.id}
-                        reasoning={activeThoughts.get(player.id)?.reasoning || ''}
-                        position={{
-                          x: 0, // Relative to the flex container
-                          y: 0  // Relative to the flex container
-                        }}
-                        onComplete={() => handleThoughtBubbleComplete(player.id)}
-                        shouldExit={exitingThoughts.has(player.id)}
-                      />
-                    )}
-                  </AnimatePresence>
+                  {activeThoughts.has(player.id) && (
+                    <ThoughtBubble
+                      key={`${player.id}-thought`}
+                      playerId={player.id}
+                      reasoning={activeThoughts.get(player.id)?.reasoning || ''}
+                      position={{
+                        x: 0, // Relative to the flex container
+                        y: 0  // Relative to the flex container
+                      }}
+                      onComplete={() => handleThoughtBubbleComplete(player.id)}
+                    />
+                  )}
                 </div>
                 
                 {/* Player cards */}
