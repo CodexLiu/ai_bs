@@ -298,7 +298,10 @@ class AIPlayer:
     
     def _execute_call_bs(self, parameters: Dict[str, Any]) -> Tuple[bool, str]:
         """Execute call_bs action"""
-        success, message = self.context_manager.game_state_manager.call_bs(self.player_id)
+        success, message = self.context_manager.game_state_manager.call_bs(
+            self.player_id, 
+            handle_turn_advancement=False  # Orchestrator handles turn advancement
+        )
         return success, message
     
     def get_player_info(self) -> Dict[str, Any]:

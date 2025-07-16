@@ -1,4 +1,5 @@
 from typing import Dict, List, Any
+import json
 from .game_state_manager import GameStateManager
 from .card_system import Card, Rank
 
@@ -297,9 +298,9 @@ class ContextManager:
         return self.conversation_history.get(player_id, [])
     
     def should_summarize_context(self, player_id: str) -> bool:
-        """Check if context should be summarized (4+ turns)."""
+        """Check if context should be summarized (every 2 turns)."""
         history = self.get_conversation_history(player_id)
-        should_summarize = len(history) >= 4
+        should_summarize = len(history) >= 2 and len(history) % 2 == 0
         print(f"🔍 DEBUG: Player {player_id} history length: {len(history)}, should_summarize: {should_summarize}")
         return should_summarize
 
@@ -322,13 +323,26 @@ class ContextManager:
         # Get first 2 turns to summarize
         turns_to_summarize = history[:2]
         
+        # Get existing summary if it exists
+        existing_summary = self.get_player_summary(player_id)
+        
         # Create summarization prompt
         summarization_prompt = f"""You are {player_id} reflecting on your game experience so far. 
 
 YOUR PERSONALITY: {personality}
 YOUR PLAY STYLE: {play_style}
 
-Based on the following game history, create a structured reflection about:
+"""
+        
+        # Include previous summary if it exists
+        if existing_summary and 'summary' in existing_summary:
+            print(f"🔍 DEBUG: Including previous summary for {player_id} in new summarization")
+            summarization_prompt += f"""PREVIOUS INSIGHTS (build upon these):
+{json.dumps(existing_summary['summary'], indent=2)}
+
+"""
+        
+        summarization_prompt += """Based on the following game history, create a structured reflection that BUILDS UPON your previous insights (if any) about:
 1. What you've learned about other players' personalities and play styles
 2. Strategies that have worked well for you
 3. Strategies that haven't worked and should be avoided
@@ -372,6 +386,8 @@ Please provide a JSON response with this structure:
   "game_reflection": "overall thoughts on the game so far"
 }
 
+IMPORTANT: If you have previous insights, UPDATE and INTEGRATE them with new observations. Don't just repeat old information - refine, expand, and correct your understanding based on new evidence.
+
 Respond only with valid JSON."""
         
         # Call OpenAI API for summarization
@@ -383,7 +399,6 @@ Respond only with valid JSON."""
                 temperature=0.7
             )
             
-            import json
             summary = json.loads(response)
             
             # Store the summary

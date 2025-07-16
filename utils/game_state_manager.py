@@ -169,7 +169,7 @@ class GameStateManager:
         
         return True
     
-    def call_bs(self, caller_id: str) -> Tuple[bool, str]:
+    def call_bs(self, caller_id: str, handle_turn_advancement: bool = True) -> Tuple[bool, str]:
         """Player calls BS on the last play"""
         if not self.game_state.center_pile:
             return False, "No cards have been played yet"
@@ -210,13 +210,18 @@ class GameStateManager:
                     "caught_player": target_player
                 })
             
-            # Person who called BS gets to play next with the next rank
-            old_index = self.game_state.current_player_index
-            old_player = self.game_state.player_order[old_index]
-            self.game_state.current_player_index = self.game_state.player_order.index(caller_id)
-            self.game_state.turn_number += 1
-            self._advance_rank()
-            print(f"   🔄 DEBUG: BS correct - turn set from {old_player} (index {old_index}) to {caller_id} (index {self.game_state.current_player_index})")
+            if handle_turn_advancement:
+                # Person who called BS gets to play next with the next rank
+                old_index = self.game_state.current_player_index
+                old_player = self.game_state.player_order[old_index]
+                self.game_state.current_player_index = self.game_state.player_order.index(caller_id)
+                self.game_state.turn_number += 1
+                self._advance_rank()
+                print(f"   🔄 DEBUG: BS correct - turn set from {old_player} (index {old_index}) to {caller_id} (index {self.game_state.current_player_index})")
+            else:
+                # Just advance the rank, orchestrator handles turn
+                self._advance_rank()
+                print(f"   🔄 DEBUG: BS correct - caller {caller_id} stays as current player, rank advanced")
         else:
             # BS was called incorrectly - caller takes all cards
             self._player_takes_center_pile(caller_id)
@@ -234,12 +239,17 @@ class GameStateManager:
                     "caught_player": caller_id
                 })
             
-            # Turn advances to next player in sequence after incorrect BS call
-            old_index = self.game_state.current_player_index
-            old_player = self.game_state.player_order[old_index]
-            self._advance_turn()
-            new_player = self.game_state.player_order[self.game_state.current_player_index]
-            print(f"   🔄 DEBUG: BS incorrect - turn advances from {old_player} (index {old_index}) to {new_player} (index {self.game_state.current_player_index})")
+            if handle_turn_advancement:
+                # Turn advances to next player in sequence after incorrect BS call
+                old_index = self.game_state.current_player_index
+                old_player = self.game_state.player_order[old_index]
+                self._advance_turn()
+                new_player = self.game_state.player_order[self.game_state.current_player_index]
+                print(f"   🔄 DEBUG: BS incorrect - turn advances from {old_player} (index {old_index}) to {new_player} (index {self.game_state.current_player_index})")
+            else:
+                # Just advance the rank, orchestrator handles turn
+                self._advance_rank()
+                print(f"   🔄 DEBUG: BS incorrect - turn advances to next player in sequence, rank advanced")
         
         return True, result_msg
     

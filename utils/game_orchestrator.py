@@ -177,12 +177,14 @@ class GameOrchestrator:
                 print(f"🔍 DEBUG: Adding {self.turn_delay}s delay before BS call opportunity")
                 time.sleep(self.turn_delay)
                 
+                # Advance turn BEFORE handling BS calls so the next player is shown as current
+                self.game_state.advance_turn()
+                
                 # Allow other players to call BS on this play
                 bs_was_called = self._handle_potential_bs_calls(current_player_id)
                 
-                # Only advance turn if no BS was called (BS calls handle their own turn advancement)
-                if not bs_was_called:
-                    self.game_state.advance_turn()
+                # If BS was called, the turn was already handled in the BS call logic
+                # If no BS was called, the turn is already advanced above
                     
                 # Add delay between turns for animations
                 time.sleep(self.turn_delay)
@@ -213,6 +215,16 @@ class GameOrchestrator:
         was_bs = not all(card.rank == claimed_rank for card in actual_cards)
         
         print(f"🔍 DEBUG: Was BS? {was_bs}")
+        
+        # Handle turn advancement based on BS call result
+        if was_bs:
+            # Correct BS call - caller stays as current player (no change needed)
+            print(f"🔍 DEBUG: BS correct - {caller_id} stays as current player")
+        else:
+            # Incorrect BS call - advance to next player in sequence
+            self.game_state.advance_turn()
+            new_current_player = self.game_state.get_current_player()
+            print(f"🔍 DEBUG: BS incorrect - turn advances from {caller_id} to {new_current_player}")
         
         # Use the captured center pile cards
         center_pile_cards = center_pile_data["all_center_cards"]
@@ -316,26 +328,26 @@ class GameOrchestrator:
         # Add longer delay after reactions to ensure they're fully displayed before continuing
         time.sleep(2.0)
     
-    def _handle_potential_bs_calls(self, current_player_id: str) -> bool:
-        """Allow only the next player in turn order to call BS on the current player's move"""
+    def _handle_potential_bs_calls(self, previous_player_id: str) -> bool:
+        """Allow the current player (who is now the next player after turn advancement) to call BS"""
         if not self.game_state.game_state.center_pile:
             return False
         
-        # Only the next player in turn order can call BS
-        next_player_id = self.game_state.get_next_player()
-        next_player = self.players[next_player_id]
+        # The current player is now the one who can call BS (turn was advanced before this call)
+        current_player_id = self.game_state.get_current_player()
+        current_player = self.players[current_player_id]
         
-        # Ask the next player if they want to call BS
-        action_result = next_player.get_action(debug_mode=(self.logger.mode == LogLevel.DEBUG))
+        # Ask the current player if they want to call BS
+        action_result = current_player.get_action(debug_mode=(self.logger.mode == LogLevel.DEBUG))
         
-        print(f"🔍 DEBUG: Next player ({next_player_id}) action result: {action_result}")
+        print(f"🔍 DEBUG: Current player ({current_player_id}) action result: {action_result}")
         
-        # Only proceed if the next player wants to call BS
+        # Only proceed if the current player wants to call BS
         if action_result.get("action") == "call_bs":
             # Log the action
-            self.logger.log_ai_action(next_player_id, action_result)
+            self.logger.log_ai_action(current_player_id, action_result)
             
-            print(f"🔍 DEBUG: Processing BS call from {next_player_id}")
+            print(f"🔍 DEBUG: Processing BS call from {current_player_id}")
             
             # CAPTURE CENTER PILE DATA BEFORE IT GETS CLEARED BY execute_action
             center_pile_data = {
@@ -349,20 +361,26 @@ class GameOrchestrator:
             
             print(f"🔍 DEBUG: Captured center pile data before execute_action")
             
-            success, message = next_player.execute_action(action_result)
-            self.logger.log_action_result(next_player_id, success, message)
+            # Temporarily revert turn for BS call validation, then restore
+            # The BS call logic expects the caller to NOT be the current player
+            self.game_state.game_state.current_player_index = self.game_state.player_ids.index(previous_player_id)
+            
+            success, message = current_player.execute_action(action_result)
+            self.logger.log_action_result(current_player_id, success, message)
             
             if success:
                 print(f"🔍 DEBUG: BS call successful, handling result")
                 # Handle BS call result with captured data
-                self._handle_bs_call(next_player_id, action_result, center_pile_data)
+                self._handle_bs_call(current_player_id, action_result, center_pile_data)
                 return True  # BS was called
             else:
                 print(f"🔍 DEBUG: BS call failed: {message}")
+                # Restore the turn advancement if BS call failed
+                self.game_state.game_state.current_player_index = self.game_state.player_ids.index(current_player_id)
         else:
-            print(f"🔍 DEBUG: Next player ({next_player_id}) chose not to call BS, action: {action_result.get('action')}")
+            print(f"🔍 DEBUG: Current player ({current_player_id}) chose not to call BS, action: {action_result.get('action')}")
         
-        # If next player didn't call BS or had an error, continue
+        # If current player didn't call BS or had an error, continue
         return False  # No BS was called
     
     def _handle_game_end(self, turn_count: int) -> Dict[str, Any]:

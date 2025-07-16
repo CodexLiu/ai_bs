@@ -20,7 +20,7 @@ from pydantic import BaseModel
 from utils.game_orchestrator import GameOrchestrator
 from utils.game_logger import LogLevel
 from utils.card_system import Card, Rank, Suit
-from characters import alice, marcus, randall, susan
+from characters import G1, G2, OAI1, OAI2
 
 app = FastAPI(title="BS Card Game API", version="1.0.0")
 
@@ -121,28 +121,28 @@ def create_player_configs() -> List[Dict[str, str]]:
     """Create player configurations with character personalities"""
     return [
         {
-            "id": "alice",
-            "personality": alice.personality,
-            "play_style": alice.talking_style + "\n\n" + alice.play_style,
-            "model": alice.model
+            "id": "G2",
+            "personality": G2.personality,
+            "play_style": G2.talking_style + "\n\n" + G2.play_style,
+            "model": G2.model
         },
         {
-            "id": "marcus", 
-            "personality": marcus.personality,
-            "play_style": marcus.talking_style + "\n\n" + marcus.play_style,
-            "model": marcus.model
+            "id": "G1", 
+            "personality": G1.personality,
+            "play_style": G1.talking_style + "\n\n" + G1.play_style,
+            "model": G1.model
         },
         {
-            "id": "randall",
-            "personality": randall.personality,
-            "play_style": randall.talking_style + "\n\n" + randall.play_style,
-            "model": randall.model
+            "id": "OAI2",
+            "personality": OAI2.personality,
+            "play_style": OAI2.talking_style + "\n\n" + OAI2.play_style,
+            "model": OAI2.model
         },
         {
-            "id": "susan",
-            "personality": susan.personality,
-            "play_style": susan.talking_style + "\n\n" + susan.play_style,
-            "model": susan.model
+            "id": "OAI1",
+            "personality": OAI1.personality,
+            "play_style": OAI1.talking_style + "\n\n" + OAI1.play_style,
+            "model": OAI1.model
         }
     ]
 
