@@ -8,43 +8,47 @@ def get_player_action_tools() -> List[Dict[str, Any]]:
     return [
         {
             "type": "function",
-            "name": "play_cards",
-            "description": "Play cards from your hand, claiming they are of the expected rank. You can tell the truth or bluff.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "card_indices": {
-                        "type": "array",
-                        "items": {"type": "integer"},
-                        "description": "Array of 0-based indices of cards in your hand to play (e.g., [0, 2, 5] to play the 1st, 3rd, and 6th cards)"
+            "function": {
+                "name": "play_cards",
+                "description": "Play cards from your hand, claiming they are of the expected rank. You can tell the truth or bluff.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "card_indices": {
+                            "type": "array",
+                            "items": {"type": "integer"},
+                            "description": "Array of 0-based indices of cards in your hand to play (e.g., [0, 2, 5] to play the 1st, 3rd, and 6th cards)"
+                        },
+                        "claimed_count": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 4,
+                            "description": "Number of cards you claim to be playing (must match the actual number of cards)"
+                        },
+                        "reasoning": {
+                            "type": "string",
+                            "description": "Brief explanation of your strategy for this play (e.g., 'Playing truthfully' or 'Bluffing to get rid of cards')"
+                        }
                     },
-                    "claimed_count": {
-                        "type": "integer",
-                        "minimum": 1,
-                        "maximum": 4,
-                        "description": "Number of cards you claim to be playing (must match the actual number of cards)"
-                    },
-                    "reasoning": {
-                        "type": "string",
-                        "description": "Brief explanation of your strategy for this play (e.g., 'Playing truthfully' or 'Bluffing to get rid of cards')"
-                    }
-                },
-                "required": ["card_indices", "claimed_count", "reasoning"]
+                    "required": ["card_indices", "claimed_count", "reasoning"]
+                }
             }
         },
         {
             "type": "function",
-            "name": "call_bs",
-            "description": "Call BS on the previous player's claim if you think they were lying about their cards. You can only call BS if you are the next player in the turn order. You cannot call BS on yourself or when it's your turn to play.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "reasoning": {
-                        "type": "string",
-                        "description": "Brief explanation of why you think the previous player was bluffing (e.g., 'They claimed 4 Aces but I have 3 Aces' or 'Suspicious behavior')"
-                    }
-                },
-                "required": ["reasoning"]
+            "function": {
+                "name": "call_bs",
+                "description": "Call BS on the previous player's claim if you think they were lying about their cards. You can only call BS if you are the next player in the turn order. You cannot call BS on yourself or when it's your turn to play.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "reasoning": {
+                            "type": "string",
+                            "description": "Brief explanation of why you think the previous player was bluffing (e.g., 'They claimed 4 Aces but I have 3 Aces' or 'Suspicious behavior')"
+                        }
+                    },
+                    "required": ["reasoning"]
+                }
             }
         }
     ]

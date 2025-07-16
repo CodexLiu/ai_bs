@@ -18,22 +18,26 @@ def create_player_configs() -> List[Dict[str, str]]:
         {
             "id": "alice",
             "personality": alice.personality,
-            "play_style": alice.talking_style + "\n\n" + alice.play_style
+            "play_style": alice.talking_style + "\n\n" + alice.play_style,
+            "model": alice.model
         },
         {
             "id": "marcus", 
             "personality": marcus.personality,
-            "play_style": marcus.talking_style + "\n\n" + marcus.play_style
+            "play_style": marcus.talking_style + "\n\n" + marcus.play_style,
+            "model": marcus.model
         },
         {
             "id": "randall",
             "personality": randall.personality,
-            "play_style": randall.talking_style + "\n\n" + randall.play_style
+            "play_style": randall.talking_style + "\n\n" + randall.play_style,
+            "model": randall.model
         },
         {
             "id": "susan",
             "personality": susan.personality,
-            "play_style": susan.talking_style + "\n\n" + susan.play_style
+            "play_style": susan.talking_style + "\n\n" + susan.play_style,
+            "model": susan.model
         }
     ]
     

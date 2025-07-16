@@ -70,6 +70,7 @@ export interface PlayerInfo {
   name: string;
   hand_count: number;
   is_current_player: boolean;
+  model: string;
 }
 
 export interface GameUIState {

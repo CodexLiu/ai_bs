@@ -34,7 +34,8 @@ class GameOrchestrator:
                 player_id=config["id"],
                 context_manager=self.context_manager,
                 personality=config.get("personality", ""),
-                play_style=config.get("play_style", "")
+                play_style=config.get("play_style", ""),
+                model=config.get("model", "gpt-4o-mini")
             )
         
         # Game flow control

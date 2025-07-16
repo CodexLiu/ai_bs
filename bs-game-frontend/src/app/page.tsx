@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import GameBoard from '@/components/GameBoard';
+import AgentSummaryModal from '@/components/AgentSummaryModal';
 import GameApi from '@/lib/gameApi';
 import { Card, GameUIState } from '@/types/game';
 
@@ -23,8 +24,14 @@ export default function GamePage() {
   const [zoom, setZoom] = useState(1.0);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
-  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // Modal state
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
+  const [selectedPlayerSummary, setSelectedPlayerSummary] = useState<any>(null);
+  const [isLoadingSummary, setIsLoadingSummary] = useState(false);
 
   // Function to refresh game state
   const refreshGameState = useCallback(async () => {
@@ -48,6 +55,42 @@ export default function GamePage() {
       return false;
     }
   }, [gameApi]);
+
+  // Handle player card clicks
+  const handlePlayerCardClick = useCallback(async (playerId: string) => {
+    if (isLoadingSummary) return;
+    
+    setIsLoadingSummary(true);
+    setSelectedPlayerId(playerId);
+    
+    try {
+      const response = await gameApi.getAgentSummary(playerId);
+      // Always open modal regardless of success - modal handles empty summaries
+      setSelectedPlayerSummary(response.success ? response.data : null);
+      setIsModalOpen(true);
+      
+      // Only set error if there was an actual error, not just "no summary available"
+      if (!response.success && response.error && !response.error.includes('No summary available')) {
+        setError(response.error);
+      } else {
+        setError(null); // Clear any previous errors
+      }
+    } catch (err) {
+      setError('Failed to get agent summary');
+      // Still open modal to show the error
+      setSelectedPlayerSummary(null);
+      setIsModalOpen(true);
+    } finally {
+      setIsLoadingSummary(false);
+    }
+  }, [gameApi, isLoadingSummary]);
+
+  // Handle modal close
+  const handleModalClose = useCallback(() => {
+    setIsModalOpen(false);
+    setSelectedPlayerId(null);
+    setSelectedPlayerSummary(null);
+  }, []);
 
   // Handle game events for animations
   const handleGameEvent = useCallback((event: any) => {
@@ -147,22 +190,42 @@ export default function GamePage() {
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     if (e.button === 0) { // Left click
-      setIsDragging(true);
-      setDragStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
+      // Check if click is on a player card or its children
+      const target = e.target as HTMLElement;
+      const isPlayerCard = target.closest('[data-player-card]');
+      
+      if (!isPlayerCard) {
+        // Don't immediately set dragging - wait for movement
+        setDragStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
+      }
     }
   }, [pan]);
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
-    if (isDragging) {
-      setPan({
-        x: e.clientX - dragStart.x,
-        y: e.clientY - dragStart.y
-      });
+    // Only handle mouse movement if we have a drag start point
+    if (dragStart) {
+      if (!isDragging) {
+        // Check if we've moved enough to start dragging
+        const deltaX = Math.abs(e.clientX - (dragStart.x + pan.x));
+        const deltaY = Math.abs(e.clientY - (dragStart.y + pan.y));
+        
+        if (deltaX > 5 || deltaY > 5) { // 5px threshold
+          setIsDragging(true);
+        }
+      }
+      
+      if (isDragging) {
+        setPan({
+          x: e.clientX - dragStart.x,
+          y: e.clientY - dragStart.y
+        });
+      }
     }
-  }, [isDragging, dragStart]);
+  }, [isDragging, dragStart, pan]);
 
   const handleMouseUp = useCallback(() => {
     setIsDragging(false);
+    setDragStart(null);
   }, []);
 
   // Show start game screen if no game is active
@@ -223,8 +286,18 @@ export default function GamePage() {
           onCardPlay={(playerId, cardIds) => {
             console.log(`Player ${playerId} played cards:`, cardIds);
           }}
+          onPlayerCardClick={handlePlayerCardClick}
         />
       </div>
+
+      <AgentSummaryModal
+        isOpen={isModalOpen}
+        onClose={handleModalClose}
+        playerId={selectedPlayerId}
+        summary={selectedPlayerSummary}
+        isLoading={isLoadingSummary}
+        error={error}
+      />
     </div>
   );
 }

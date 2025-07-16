@@ -8,6 +8,8 @@ import asyncio
 import json
 import threading
 import time
+import signal
+import sys
 from typing import Dict, List, Any, Optional
 from datetime import datetime
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
@@ -37,6 +39,43 @@ game_thread: Optional[threading.Thread] = None
 game_events: List[Dict[str, Any]] = []
 connected_clients: List[WebSocket] = []
 game_running = False
+shutdown_event = threading.Event()
+
+def signal_handler(signum, frame):
+    """Handle shutdown signals"""
+    print(f"\n🛑 Received signal {signum}, shutting down...")
+    cleanup_and_exit()
+
+def cleanup_and_exit():
+    """Clean up resources and exit"""
+    global game_running, game_orchestrator, game_thread
+    
+    print("🧹 Cleaning up resources...")
+    
+    # Stop the game loop
+    game_running = False
+    shutdown_event.set()
+    
+    # Wait for game thread to finish
+    if game_thread and game_thread.is_alive():
+        print("⏳ Waiting for game thread to finish...")
+        game_thread.join(timeout=2)
+        if game_thread.is_alive():
+            print("⚠️  Game thread didn't finish in time, forcing exit")
+    
+    # Close WebSocket connections
+    for client in connected_clients:
+        try:
+            asyncio.create_task(client.close())
+        except:
+            pass
+    
+    print("✅ Cleanup complete, exiting...")
+    sys.exit(0)
+
+# Register signal handlers
+signal.signal(signal.SIGINT, signal_handler)   # Ctrl+C
+signal.signal(signal.SIGTERM, signal_handler)  # Termination signal
 
 class GameStateResponse(BaseModel):
     game_state: Dict[str, Any]
@@ -84,22 +123,26 @@ def create_player_configs() -> List[Dict[str, str]]:
         {
             "id": "alice",
             "personality": alice.personality,
-            "play_style": alice.talking_style + "\n\n" + alice.play_style
+            "play_style": alice.talking_style + "\n\n" + alice.play_style,
+            "model": alice.model
         },
         {
             "id": "marcus", 
             "personality": marcus.personality,
-            "play_style": marcus.talking_style + "\n\n" + marcus.play_style
+            "play_style": marcus.talking_style + "\n\n" + marcus.play_style,
+            "model": marcus.model
         },
         {
             "id": "randall",
             "personality": randall.personality,
-            "play_style": randall.talking_style + "\n\n" + randall.play_style
+            "play_style": randall.talking_style + "\n\n" + randall.play_style,
+            "model": randall.model
         },
         {
             "id": "susan",
             "personality": susan.personality,
-            "play_style": susan.talking_style + "\n\n" + susan.play_style
+            "play_style": susan.talking_style + "\n\n" + susan.play_style,
+            "model": susan.model
         }
     ]
 
@@ -114,18 +157,26 @@ def get_game_state_dict() -> Dict[str, Any]:
     players = []
     for player_id in game_orchestrator.player_ids:
         hand_counts = game_info.get("hand_counts", {})
+        # Get the model information from the player config
+        player_model = "gpt-4o-mini"  # default fallback
+        for config in game_orchestrator.player_configs:
+            if config["id"] == player_id:
+                player_model = config.get("model", "gpt-4o-mini")
+                break
+        
         players.append({
             "id": player_id,
             "name": player_id.title(),
             "hand_count": hand_counts.get(player_id, 0),
-            "is_current_player": player_id == game_info.get("current_player")
+            "is_current_player": player_id == game_info.get("current_player"),
+            "model": player_model
         })
     
     return {
         "players": players,
         "current_expected_rank": game_info.get("expected_rank", "Ace"),
         "center_pile_count": game_info.get("center_pile_count", 0),
-        "turn_number": game_info.get("turn_number", 1),
+        "turn_number": game_info.get("turn_number", 0),
         "last_action": game_orchestrator.game_state.game_state.last_action or "Game starting...",
         "game_phase": game_info.get("game_phase", "playing"),
         "winner": game_info.get("winner")
@@ -177,26 +228,31 @@ def run_game_loop():
     game_running = True
     
     try:
-        print("Starting game loop...")
+        print("🎮 Starting game loop...")
         
-        # Run the game
+        # Run the game - this will run until completion or shutdown
         results = game_orchestrator.run_game()
         
-        print(f"Game ended: {results}")
-        
-        # Add game end event
-        end_event = {
-            "type": "game_end",
-            "winner": results.get("winner"),
-            "turn_count": results.get("turn_count"),
-            "timestamp": datetime.now().isoformat()
-        }
-        game_events.append(end_event)
+        # Only add end event if we weren't shut down
+        if not shutdown_event.is_set():
+            print(f"🏁 Game ended: {results}")
+            
+            # Add game end event
+            end_event = {
+                "type": "game_end",
+                "winner": results.get("winner"),
+                "turn_count": results.get("turn_count"),
+                "timestamp": datetime.now().isoformat()
+            }
+            game_events.append(end_event)
+        else:
+            print("🛑 Game loop stopped due to shutdown signal")
         
     except Exception as e:
-        print(f"Error in game loop: {e}")
-        import traceback
-        traceback.print_exc()
+        if not shutdown_event.is_set():
+            print(f"❌ Error in game loop: {e}")
+            import traceback
+            traceback.print_exc()
     finally:
         game_running = False
 
@@ -263,6 +319,46 @@ async def get_game_state():
         center_pile=get_center_pile_dict()
     )
 
+@app.get("/agent_summaries")
+async def get_agent_summaries():
+    """Get agent summaries for all players"""
+    if not game_orchestrator:
+        return {"success": False, "message": "No active game"}
+    
+    try:
+        # Get all player summaries from the context manager
+        summaries = game_orchestrator.context_manager.get_all_player_summaries()
+        
+        return {
+            "success": True,
+            "summaries": summaries
+        }
+        
+    except Exception as e:
+        return {"success": False, "message": str(e)}
+
+@app.get("/agent_summary/{player_id}")
+async def get_agent_summary(player_id: str):
+    """Get agent summary for a specific player"""
+    if not game_orchestrator:
+        return {"success": False, "message": "No active game"}
+    
+    try:
+        # Get summary for specific player
+        summary = game_orchestrator.context_manager.get_player_summary(player_id)
+        
+        if not summary:
+            return {"success": False, "message": f"No summary available for {player_id}"}
+        
+        return {
+            "success": True,
+            "player_id": player_id,
+            "summary": summary
+        }
+        
+    except Exception as e:
+        return {"success": False, "message": str(e)}
+
 @app.post("/advance_turn")
 async def advance_turn():
     """Advance to next turn (for debugging)"""
@@ -286,7 +382,7 @@ async def advance_turn():
 async def get_game_events():
     """Server-Sent Events endpoint for real-time updates"""
     async def event_generator():
-        while True:
+        while not shutdown_event.is_set():
             if game_events:
                 event = game_events.pop(0)
                 yield f"data: {json.dumps(event)}\n\n"
@@ -308,7 +404,7 @@ async def websocket_endpoint(websocket: WebSocket):
     connected_clients.append(websocket)
     
     try:
-        while True:
+        while not shutdown_event.is_set():
             # Send current game state periodically
             if game_orchestrator:
                 game_state = {
@@ -323,7 +419,14 @@ async def websocket_endpoint(websocket: WebSocket):
             await asyncio.sleep(2)  # Send updates every 2 seconds
             
     except WebSocketDisconnect:
-        connected_clients.remove(websocket)
+        if websocket in connected_clients:
+            connected_clients.remove(websocket)
+    except Exception as e:
+        if not shutdown_event.is_set():
+            print(f"WebSocket error: {e}")
+    finally:
+        if websocket in connected_clients:
+            connected_clients.remove(websocket)
 
 @app.get("/health")
 async def health_check():
@@ -337,7 +440,8 @@ async def health_check():
 
 if __name__ == "__main__":
     import uvicorn
-    print("Starting BS Card Game Web Server...")
-    print("Frontend should connect to: http://localhost:8000")
-    print("API docs available at: http://localhost:8000/docs")
+    print("🚀 Starting BS Card Game Web Server...")
+    print("🌐 Frontend should connect to: http://localhost:8000")
+    print("📖 API docs available at: http://localhost:8000/docs")
+    print("🛑 Press Ctrl+C to stop the server")
     uvicorn.run(app, host="0.0.0.0", port=8000, reload=False) 

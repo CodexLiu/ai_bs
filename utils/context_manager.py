@@ -5,7 +5,147 @@ from .card_system import Card, Rank
 class ContextManager:
     def __init__(self, game_state_manager: GameStateManager):
         self.game_state_manager = game_state_manager
+        # Track conversation history for each player
+        self.conversation_history: Dict[str, List[Dict[str, Any]]] = {}
+        # Track player summaries for each player
+        self.player_summaries: Dict[str, Dict[str, Any]] = {}
     
+    def add_conversation_turn(self, player_id: str, system_prompt: str, user_message: str, assistant_response: str, reasoning: str = ""):
+        """
+        Add a conversation turn to the history for a player.
+        
+        Args:
+            player_id: The ID of the player
+            system_prompt: The system prompt used
+            user_message: The user message/game state
+            assistant_response: The assistant's response
+            reasoning: The reasoning behind the decision
+        """
+        if player_id not in self.conversation_history:
+            self.conversation_history[player_id] = []
+        
+        self.conversation_history[player_id].append({
+            "turn_number": self.game_state_manager.get_turn_number(),
+            "system_prompt": system_prompt,
+            "user_message": user_message,
+            "assistant_response": assistant_response,
+            "reasoning": reasoning,
+            "timestamp": self.game_state_manager.get_turn_number()
+        })
+    
+    def get_conversation_history(self, player_id: str) -> List[Dict[str, Any]]:
+        """Get the conversation history for a player."""
+        return self.conversation_history.get(player_id, [])
+    
+    def should_summarize_context(self, player_id: str) -> bool:
+        """Check if context should be summarized (8+ turns)."""
+        history = self.get_conversation_history(player_id)
+        return len(history) >= 8
+    
+    async def summarize_and_prune_context(self, player_id: str, personality: str, play_style: str, model: str = "gpt-4o-mini"):
+        """
+        Summarize the first 6 turns and delete them, using agent personality for reflection.
+        
+        Args:
+            player_id: The ID of the player
+            personality: The player's personality
+            play_style: The player's play style
+            model: The model to use for summarization
+        """
+        from .openai_api_call import call_openai_api
+        
+        history = self.get_conversation_history(player_id)
+        if len(history) < 6:
+            return
+        
+        # Get first 6 turns to summarize
+        turns_to_summarize = history[:6]
+        
+        # Create summarization prompt
+        summarization_prompt = f"""You are {player_id} reflecting on your game experience so far. 
+
+YOUR PERSONALITY: {personality}
+YOUR PLAY STYLE: {play_style}
+
+Based on the following game history, create a structured reflection about:
+1. What you've learned about other players' personalities and play styles
+2. Strategies that have worked well for you
+3. Strategies that haven't worked and should be avoided
+4. Key game moments and lessons learned
+5. Current assessment of other players' threat levels
+
+Game History:
+"""
+        
+        # Add conversation history to prompt
+        for turn in turns_to_summarize:
+            summarization_prompt += f"\nTurn {turn['turn_number']}:\n"
+            summarization_prompt += f"Game State: {turn['user_message']}\n"
+            summarization_prompt += f"Your Action: {turn['assistant_response']}\n"
+            if turn['reasoning']:
+                summarization_prompt += f"Your Reasoning: {turn['reasoning']}\n"
+            summarization_prompt += "---\n"
+        
+        summarization_prompt += """
+
+Please provide a JSON response with this structure:
+{
+  "player_personalities": {
+    "player_name": "observed personality traits and play style"
+  },
+  "strategies_that_work": [
+    "strategy 1",
+    "strategy 2"
+  ],
+  "strategies_to_avoid": [
+    "strategy 1",
+    "strategy 2"
+  ],
+  "key_lessons": [
+    "lesson 1",
+    "lesson 2"
+  ],
+  "threat_assessment": {
+    "player_name": "threat level and reasoning"
+  },
+  "game_reflection": "overall thoughts on the game so far"
+}
+
+Respond only with valid JSON."""
+        
+        # Call OpenAI API for summarization
+        try:
+            response = await call_openai_api(
+                prompt=summarization_prompt,
+                model=model,
+                max_tokens=2000,
+                temperature=0.7
+            )
+            
+            import json
+            summary = json.loads(response)
+            
+            # Store the summary
+            self.player_summaries[player_id] = {
+                "summary": summary,
+                "summarized_turns": len(turns_to_summarize),
+                "last_updated": self.game_state_manager.get_turn_number()
+            }
+            
+            # Remove the summarized turns from history
+            self.conversation_history[player_id] = history[6:]
+            
+        except Exception as e:
+            print(f"Error summarizing context for {player_id}: {e}")
+    
+    def get_player_summary(self, player_id: str) -> Dict[str, Any]:
+        """Get the stored summary for a player."""
+        return self.player_summaries.get(player_id, {})
+    
+    def get_all_player_summaries(self) -> Dict[str, Dict[str, Any]]:
+        """Get all stored player summaries."""
+        return self.player_summaries.copy()
+
     def generate_system_prompt(self, player_id: str, personality: str = "", play_style: str = "") -> str:
         """
         Generate a comprehensive system prompt for an AI player with current game state.
@@ -52,6 +192,25 @@ CURRENT GAME STATE:
         # Add recent action if available
         if context['last_action']:
             base_prompt += f"\n- Last action: {context['last_action']}"
+        
+        # Add summarized context if available
+        summary = self.get_player_summary(player_id)
+        if summary:
+            base_prompt += f"\n\nYOUR GAME EXPERIENCE SUMMARY:\n"
+            if 'summary' in summary:
+                s = summary['summary']
+                if 'player_personalities' in s:
+                    base_prompt += f"Player Personalities: {s['player_personalities']}\n"
+                if 'strategies_that_work' in s:
+                    base_prompt += f"Strategies That Work: {s['strategies_that_work']}\n"
+                if 'strategies_to_avoid' in s:
+                    base_prompt += f"Strategies to Avoid: {s['strategies_to_avoid']}\n"
+                if 'key_lessons' in s:
+                    base_prompt += f"Key Lessons: {s['key_lessons']}\n"
+                if 'threat_assessment' in s:
+                    base_prompt += f"Threat Assessment: {s['threat_assessment']}\n"
+                if 'game_reflection' in s:
+                    base_prompt += f"Game Reflection: {s['game_reflection']}\n"
         
         # Add turn-specific instructions
         if context['is_my_turn']:

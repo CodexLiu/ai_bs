@@ -50,7 +50,8 @@ class GameApi {
         id: p.id,
         name: p.name || p.id,
         hand_count: p.hand_count,
-        is_current_player: p.is_current_player
+        is_current_player: p.is_current_player,
+        model: p.model || "gpt-4o-mini"
       })),
       current_expected_rank: this.convertRank(pythonState.current_expected_rank),
       center_pile_count: pythonState.center_pile_count,
@@ -102,6 +103,44 @@ class GameApi {
           ),
           centerPile: data.center_pile.map((card: any) => this.convertCard(card))
         }
+      };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+
+  async getAgentSummary(playerId: string): Promise<GameApiResponse> {
+    try {
+      const response = await fetch(`${this.baseUrl}/agent_summary/${playerId}`);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      return { 
+        success: data.success, 
+        data: data.success ? data.summary : null,
+        error: data.success ? undefined : data.message
+      };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+
+  async getAllAgentSummaries(): Promise<GameApiResponse> {
+    try {
+      const response = await fetch(`${this.baseUrl}/agent_summaries`);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      return { 
+        success: data.success, 
+        data: data.success ? data.summaries : null,
+        error: data.success ? undefined : data.message
       };
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
